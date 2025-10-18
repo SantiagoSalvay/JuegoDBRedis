@@ -1,0 +1,72 @@
+[
+  {
+    "question": "¿Qué significa Redis?",
+    "options": [
+      "Rapid Disk Storage",
+      "Remote Dictionary Server",
+      "Reliable Data System",
+      "Reduced Data Syntax"
+    ],
+    "answer": "Remote Dictionary Server"
+  },
+  {
+    "question": "¿Qué tipo de base de datos es Redis?",
+    "options": [
+      "Relacional",
+      "Orientada a documentos",
+      "Clave-valor en memoria",
+      "Columnar"
+    ],
+    "answer": "Clave-valor en memoria"
+  },
+  {
+    "question": "¿Qué comando se usa para guardar datos en Redis?",
+    "options": ["SET", "INSERT", "SAVE", "PUT"],
+    "answer": "SET"
+  },
+  {
+    "question": "¿Qué comando se usa para obtener un valor en Redis?",
+    "options": ["GET", "SELECT", "FETCH", "RETRIEVE"],
+    "answer": "GET"
+  },
+  {
+    "question": "¿Cuál es el puerto por defecto de Redis?",
+    "options": ["3306", "5432", "6379", "27017"],
+    "answer": "6379"
+  },
+  {
+    "question": "¿Redis es persistente por defecto?",
+    "options": [
+      "Sí, siempre guarda en disco",
+      "No, pero puede configurarse para serlo",
+      "Solo en versiones enterprise",
+      "Depende del sistema operativo"
+    ],
+    "answer": "No, pero puede configurarse para serlo"
+  },
+  {
+    "question": "¿Qué estructura de datos NO soporta Redis?",
+    "options": ["Listas", "Sets", "Hashes", "Árboles B+"],
+    "answer": "Árboles B+"
+  },
+  {
+    "question": "¿Qué comando elimina una clave en Redis?",
+    "options": ["DEL", "DROP", "REMOVE", "DELETE"],
+    "answer": "DEL"
+  },
+  {
+    "question": "¿Redis soporta transacciones?",
+    "options": [
+      "Sí, con MULTI y EXEC",
+      "No, nunca",
+      "Solo en cluster mode",
+      "Solo con Redis Enterprise"
+    ],
+    "answer": "Sí, con MULTI y EXEC"
+  },
+  {
+    "question": "¿Qué comando se usa para establecer un tiempo de expiración?",
+    "options": ["EXPIRE", "TIMEOUT", "TTL", "SETEX"],
+    "answer": "EXPIRE"
+  }
+]
