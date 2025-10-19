@@ -17,6 +17,19 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
     setIsRegistering(true);
   };
 
+  // Limpiar datos de sesión previos al unirse a un grupo
+  useEffect(() => {
+    // Limpiar datos de usuario previos al cargar el componente
+    localStorage.removeItem('redis-current-user');
+    setFirstName('');
+    setLastName('');
+    setSelectedGroup(null);
+    setIsRegistering(false);
+    setHasJoined(false);
+    setJoinedGroup(null);
+    setParticipantName('');
+  }, []);
+
   const handleJoinGroup = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       alert("Por favor, completa tu nombre y apellido");
@@ -29,7 +42,11 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
       console.log("🚀 Intentando unirse al grupo:", {
         groupId: selectedGroup.id,
         groupName: selectedGroup.name,
-        participant: { firstName: firstName.trim(), lastName: lastName.trim() },
+        participant: { 
+          firstName: firstName.trim(), 
+          lastName: lastName.trim(),
+          timestamp: Date.now() // Añadir timestamp para identificar usuarios únicos
+        },
       });
 
       // Simular delay de red

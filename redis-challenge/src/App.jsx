@@ -118,7 +118,13 @@ function App() {
   useEffect(() => {
     console.log('🔍 Initializing app...');
     
-    // 1. Obtener parámetros de la URL
+    // 1. Limpiar datos de usuarios previos al iniciar
+    console.log('🧹 Cleaning up previous session data...');
+    localStorage.removeItem('redis-current-user');
+    localStorage.removeItem('redis-user-name');
+    localStorage.removeItem('redis-group-id');
+    
+    // 2. Obtener parámetros de la URL
     const searchParams = new URLSearchParams(window.location.search);
     const urlSessionId = searchParams.get('session');
     const urlMode = searchParams.get('mode');
