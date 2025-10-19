@@ -118,7 +118,31 @@ function App() {
   useEffect(() => {
     console.log('🔍 Initializing app...');
     
-    // 1. Generar o recuperar session ID
+    // 1. Obtener parámetros de la URL
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlSessionId = searchParams.get('session');
+    const urlMode = searchParams.get('mode');
+    
+    console.log('🌐 URL Parameters:', { urlMode, urlSessionId });
+    
+    // 2. Manejar el modo de la aplicación
+    if (urlMode === 'mobile') {
+      console.log('📱 Mobile mode detected from URL');
+      setGameMode('mobile');
+      
+      // Si hay un sessionId en la URL, usarlo
+      if (urlSessionId) {
+        console.log('🔄 Using session ID from URL:', urlSessionId);
+        localStorage.setItem("redis-session-id", urlSessionId);
+        setSessionId(urlSessionId);
+        return; // Salir temprano para móviles
+      }
+    } else {
+      // Modo dashboard por defecto
+      setGameMode('dashboard');
+    }
+    
+    // 3. Para modo dashboard o sin modo específico
     let storedSessionId = localStorage.getItem("redis-session-id");
     if (!storedSessionId) {
       storedSessionId = Math.random().toString(36).substr(2, 9);
@@ -127,6 +151,7 @@ function App() {
     } else {
       console.log('🔑 Existing session ID:', storedSessionId);
     }
+    
     setSessionId(storedSessionId);
 
     // 2. Resetear estado del juego

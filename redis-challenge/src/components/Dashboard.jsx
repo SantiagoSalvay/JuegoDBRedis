@@ -6,8 +6,13 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
   const [currentURL, setCurrentURL] = useState("");
 
   useEffect(() => {
+    // Usar URL absoluta para asegurar que funcione en todos los entornos
     const baseURL = window.location.origin + window.location.pathname;
-    const mobileURL = `${baseURL}?mode=mobile&session=${sessionId}`;
+    // Eliminar cualquier parámetro existente para evitar duplicados
+    const cleanURL = baseURL.split('?')[0];
+    // Codificar la URL para evitar problemas con caracteres especiales
+    const mobileURL = `${cleanURL}?mode=mobile&session=${encodeURIComponent(sessionId)}`;
+    console.log('Generated QR URL:', mobileURL); // Para depuración
     setCurrentURL(mobileURL);
   }, [sessionId]);
 
