@@ -1,8 +1,8 @@
-import { motion } from 'framer-motion';
-import { useEffect } from 'react';
-import confetti from 'canvas-confetti';
+import { motion } from "framer-motion";
+import { useEffect } from "react";
+import confetti from "canvas-confetti";
 
-const ResultScreen = ({ score, totalQuestions, onRestart }) => {
+const ResultScreen = ({ score, totalQuestions, onRestart, groupInfo }) => {
   const maxScore = totalQuestions * 10;
   const percentage = (score / maxScore) * 100;
 
@@ -12,7 +12,7 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
       const duration = percentage >= 80 ? 3000 : 2000;
       const end = Date.now() + duration;
 
-      const colors = ['#D82C20', '#FF6B6B', '#FFA500', '#FFD700'];
+      const colors = ["#D82C20", "#FF6B6B", "#FFA500", "#FFD700"];
 
       (function frame() {
         confetti({
@@ -40,27 +40,27 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
   const getMessage = () => {
     if (percentage >= 80) {
       return {
-        emoji: '🔥',
-        title: '¡Maestro del Cache!',
-        message: 'Dominas Redis como un profesional. ¡Impresionante!',
-        color: 'text-yellow-400',
-        glow: 'glow-green',
+        emoji: "🔥",
+        title: "¡Maestro del Cache!",
+        message: "Dominas Redis como un profesional. ¡Impresionante!",
+        color: "text-yellow-400",
+        glow: "glow-green",
       };
     } else if (percentage >= 50) {
       return {
-        emoji: '⚡',
-        title: '¡Buen trabajo!',
-        message: 'Te estás acercando al nivel experto. ¡Sigue así!',
-        color: 'text-orange-400',
-        glow: 'glow-red',
+        emoji: "⚡",
+        title: "¡Buen trabajo!",
+        message: "Te estás acercando al nivel experto. ¡Sigue así!",
+        color: "text-orange-400",
+        glow: "glow-red",
       };
     } else {
       return {
-        emoji: '💾',
-        title: 'Te falta un poco de RAM mental',
-        message: '¡No te preocupes! La práctica hace al maestro. 😅',
-        color: 'text-blue-400',
-        glow: '',
+        emoji: "💾",
+        title: "Te falta un poco de RAM mental",
+        message: "¡No te preocupes! La práctica hace al maestro. 😅",
+        color: "text-blue-400",
+        glow: "",
       };
     }
   };
@@ -71,19 +71,37 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col items-center justify-center min-h-screen px-4"
+      className="flex flex-col items-center justify-center h-screen w-screen px-4 overflow-y-auto"
     >
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
         className="w-full max-w-2xl bg-redis-gray rounded-3xl p-8 md:p-12 shadow-2xl text-center"
       >
+        {/* Group Info */}
+        {groupInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="inline-flex items-center gap-3 bg-redis-black rounded-full px-6 py-3">
+              <div
+                className="w-4 h-4 rounded-full"
+                style={{ backgroundColor: groupInfo.group.color }}
+              />
+              <span className="text-lg font-bold text-white">
+                Grupo {groupInfo.groupId} - {groupInfo.group.name}
+              </span>
+            </div>
+          </motion.div>
+        )}
         {/* Emoji */}
         <motion.div
           initial={{ scale: 0, rotate: -180 }}
           animate={{ scale: 1, rotate: 0 }}
-          transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
           className="text-8xl md:text-9xl mb-6"
         >
           {result.emoji}
@@ -113,7 +131,7 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ delay: 0.9, type: 'spring', stiffness: 100 }}
+          transition={{ delay: 0.9, type: "spring", stiffness: 100 }}
           className={`bg-redis-black rounded-2xl p-8 mb-8 ${result.glow}`}
         >
           <div className="text-gray-400 text-sm md:text-base mb-2 font-mono">
@@ -135,20 +153,22 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
           <div className="mt-6">
             <div className="flex justify-between text-sm text-gray-500 mb-2">
               <span>0%</span>
-              <span className="font-bold text-white">{percentage.toFixed(0)}%</span>
+              <span className="font-bold text-white">
+                {percentage.toFixed(0)}%
+              </span>
               <span>100%</span>
             </div>
             <div className="h-3 bg-redis-gray rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${percentage}%` }}
-                transition={{ delay: 1.3, duration: 1, ease: 'easeOut' }}
+                transition={{ delay: 1.3, duration: 1, ease: "easeOut" }}
                 className={`h-full rounded-full ${
                   percentage >= 80
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-400'
+                    ? "bg-gradient-to-r from-green-500 to-emerald-400"
                     : percentage >= 50
-                    ? 'bg-gradient-to-r from-orange-500 to-yellow-400'
-                    : 'bg-gradient-to-r from-blue-500 to-cyan-400'
+                      ? "bg-gradient-to-r from-orange-500 to-yellow-400"
+                      : "bg-gradient-to-r from-blue-500 to-cyan-400"
                 }`}
               />
             </div>
@@ -164,13 +184,13 @@ const ResultScreen = ({ score, totalQuestions, onRestart }) => {
         >
           <div className="bg-redis-black rounded-xl p-4">
             <div className="text-2xl md:text-3xl font-bold text-white">
-              {Math.round((score / 10))}
+              {Math.round(score / 10)}
             </div>
             <div className="text-xs md:text-sm text-gray-400">Correctas</div>
           </div>
           <div className="bg-redis-black rounded-xl p-4">
             <div className="text-2xl md:text-3xl font-bold text-white">
-              {totalQuestions - Math.round((score / 10))}
+              {totalQuestions - Math.round(score / 10)}
             </div>
             <div className="text-xs md:text-sm text-gray-400">Incorrectas</div>
           </div>

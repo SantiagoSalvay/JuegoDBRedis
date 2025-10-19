@@ -1,6 +1,12 @@
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 
-const ScoreBoard = ({ score, currentQuestion, totalQuestions, streak }) => {
+const ScoreBoard = ({
+  score,
+  currentQuestion,
+  totalQuestions,
+  streak,
+  groupInfo,
+}) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -8,6 +14,22 @@ const ScoreBoard = ({ score, currentQuestion, totalQuestions, streak }) => {
       className="fixed top-0 left-0 right-0 bg-redis-gray/95 backdrop-blur-sm shadow-lg z-50"
     >
       <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+        {/* Group Info */}
+        {groupInfo && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-3"
+          >
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: groupInfo.group.color }}
+            />
+            <span className="text-sm md:text-base text-gray-300">
+              {groupInfo.group.name}
+            </span>
+          </motion.div>
+        )}
         {/* Score */}
         <motion.div
           key={score}
@@ -15,7 +37,9 @@ const ScoreBoard = ({ score, currentQuestion, totalQuestions, streak }) => {
           animate={{ scale: 1 }}
           className="flex items-center gap-3"
         >
-          <span className="text-gray-400 text-sm md:text-base">Puntuación:</span>
+          <span className="text-gray-400 text-sm md:text-base">
+            Puntuación:
+          </span>
           <motion.span
             className="text-2xl md:text-3xl font-bold text-redis-red glow-red"
             animate={{
@@ -59,7 +83,9 @@ const ScoreBoard = ({ score, currentQuestion, totalQuestions, streak }) => {
             <motion.div
               className="h-full bg-gradient-to-r from-redis-red to-orange-500"
               initial={{ width: 0 }}
-              animate={{ width: `${((currentQuestion + 1) / totalQuestions) * 100}%` }}
+              animate={{
+                width: `${((currentQuestion + 1) / totalQuestions) * 100}%`,
+              }}
               transition={{ duration: 0.5, ease: "easeOut" }}
             />
           </div>

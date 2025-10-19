@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Sincronización Redis Challenge</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1E1E1E;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: #2C2C2C;
+            border: 2px solid #D82C20;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .button {
+            background: #D82C20;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #B82419;
+        }
+        .group {
+            background: #1E1E1E;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #D82C20;
+        }
+        .participant {
+            background: #333;
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success { background: #2D5A2D; }
+        .error { background: #5A2D2D; }
+        .info { background: #2D4A5A; }
+        .console {
+            background: #000;
+            color: #0F0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test de Sincronización - Redis Challenge</h1>
+        <p>Esta página sirve para verificar que la sincronización entre ventanas funcione correctamente.</p>
+
+        <div class="panel">
+            <h2>📡 Estado de Comunicación</h2>
+            <div id="broadcast-status" class="status info">
+                🔄 Inicializando BroadcastChannel...
+            </div>
+            <div id="localStorage-status" class="status info">
+                💾 Verificando localStorage...
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>🎮 Simulador de Acciones</h2>
+            <p>Usa estos botones para simular que alguien se une a un grupo:</p>
+
+            <button class="button" onclick="joinGroup(1, 'Test', 'User1')">
+                ➕ Unir Usuario al Grupo 1 (MongoDB)
+            </button>
+            <button class="button" onclick="joinGroup(2, 'Demo', 'User2')">
+                ➕ Unir Usuario al Grupo 2 (Cassandra)
+            </button>
+            <button class="button" onclick="clearAllGroups()">
+                🗑️ Limpiar Todos los Grupos
+            </button>
+            <button class="button" onclick="loadGroups()">
+                🔄 Recargar Grupos
+            </button>
+        </div>
+
+        <div class="panel">
+            <h2>👥 Estado Actual de Grupos</h2>
+            <div id="groups-display">
+                <div class="status info">🔄 Cargando grupos...</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>📋 Console de Debug</h2>
+            <div id="debug-console" class="console">
+                Iniciando test de sincronización...\n
+            </div>
+            <button class="button" onclick="clearConsole()">🗑️ Limpiar Console</button>
+        </div>
+
+        <div class="panel">
+            <h2>📖 Instrucciones</h2>
+            <ol>
+                <li><strong>Abrir múltiples ventanas:</strong> Abre esta página en varias pestañas/ventanas</li>
+                <li><strong>Agregar usuarios:</strong> Usa los botones "➕ Unir Usuario" en cualquier ventana</li>
+                <li><strong>Verificar sincronización:</strong> Los cambios deberían aparecer inmediatamente en todas las ventanas</li>
+                <li><strong>Probar la app real:</strong> Ve a <a href="http://localhost:5174" target="_blank">http://localhost:5174</a></li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de grupos (misma que en la app principal)
+        const GROUPS_CONFIG = [
+            { id: 1, name: "MongoDB", color: "#4DB33D", participants: [] },
+            { id: 2, name: "Cassandra", color: "#1287A5", participants: [] },
+            { id: 3, name: "Neo4j", color: "#008CC1", participants: [] },
+            { id: 4, name: "CouchDB", color: "#E42528", participants: [] },
+            { id: 6, name: "BigTable", color: "#4285F4", participants: [] },
+            { id: 7, name: "Amazon DynamoDB", color: "#FF9900", participants: [] },
+            { id: 8, name: "ArangoDB", color: "#68A063", participants: [] },
+        ];
+
+        let broadcastChannel;
+        let groups = [...GROUPS_CONFIG];
+
+        // Función para agregar mensajes al console de debug
+        function logToConsole(message) {
+            const console = document.getElementById('debug-console');
+            const timestamp = new Date().toLocaleTimeString();
+            console.innerHTML += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        // Inicialización
+        function init() {
+            logToConsole('🚀 Inicializando test de sincronización...');
+
+            // Crear BroadcastChannel
+            try {
+                broadcastChannel = new BroadcastChannel('redis-challenge');
+                document.getElementById('broadcast-status').innerHTML = '✅ BroadcastChannel activo';
+                document.getElementById('broadcast-status').className = 'status success';
+                logToConsole('📡 BroadcastChannel creado exitosamente');
+
+                // Escuchar mensajes
+                broadcastChannel.addEventListener('message', handleBroadcastMessage);
+            } catch (error) {
+                document.getElementById('broadcast-status').innerHTML = '❌ Error: ' + error.message;
+                document.getElementById('broadcast-status').className = 'status error';
+                logToConsole('❌ Error creando BroadcastChannel: ' + error.message);
+            }
+
+            // Verificar localStorage
+            try {
+                const stored = localStorage.getItem('redis-groups');
+                if (stored) {
+                    groups = JSON.parse(stored);
+                    document.getElementById('localStorage-status').innerHTML = '✅ localStorage cargado';
+                    document.getElementById('localStorage-status').className = 'status success';
+                    logToConsole('💾 Grupos cargados desde localStorage');
+                } else {
+                    document.getElementById('localStorage-status').innerHTML = '⚠️ localStorage vacío (primera vez)';
+                    document.getElementById('localStorage-status').className = 'status info';
+                    logToConsole('💾 localStorage vacío, usando configuración por defecto');
+                }
+            } catch (error) {
+                document.getElementById('localStorage-status').innerHTML = '❌ Error: ' + error.message;
+                document.getElementById('localStorage-status').className = 'status error';
+                logToConsole('❌ Error accediendo localStorage: ' + error.message);
+            }
+
+            // Mostrar grupos iniciales
+            updateGroupsDisplay();
+        }
+
+        // Manejar mensajes del BroadcastChannel
+        function handleBroadcastMessage(event) {
+            const { type, data, timestamp } = event.data;
+            logToConsole(`📡 Mensaje recibido: ${type} con ${data?.length || 0} grupos`);
+
+            if (type === 'GROUPS_UPDATED') {
+                groups = data;
+                updateGroupsDisplay();
+                logToConsole('🔄 Grupos actualizados desde broadcast');
+            }
+        }
+
+        // Actualizar display de grupos
+        function updateGroupsDisplay() {
+            const display = document.getElementById('groups-display');
+
+            let html = '';
+            let totalParticipants = 0;
+
+            groups.forEach(group => {
+                const participantCount = group.participants?.length || 0;
+                totalParticipants += participantCount;
+
+                html += `
+                    <div class="group">
+                        <div style="color: ${group.color}; font-weight: bold;">
+                            🏷️ Grupo ${group.id} - ${group.name} (${participantCount} participantes)
+                        </div>
+                `;
+
+                if (participantCount > 0) {
+                    group.participants.forEach(participant => {
+                        html += `
+                            <div class="participant">
+                                👤 ${participant.firstName} ${participant.lastName}
+                                <small>(${new Date(participant.joinedAt).toLocaleTimeString()})</small>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += '<div class="participant" style="color: #999;">Sin participantes</div>';
+                }
+
+                html += '</div>';
+            });
+
+            html += `
+                <div class="status ${totalParticipants > 0 ? 'success' : 'info'}" style="text-align: center; font-size: 18px; font-weight: bold;">
+                    📊 TOTAL: ${totalParticipants} PARTICIPANTES
+                </div>
+            `;
+
+            display.innerHTML = html;
+        }
+
+        // Simular unirse a un grupo
+        function joinGroup(groupId, firstName, lastName) {
+            logToConsole(`🚀 Simulando unión al Grupo ${groupId}: ${firstName} ${lastName}`);
+
+            const newParticipant = {
+                id: Math.random().toString(36).substr(2, 9),
+                firstName,
+                lastName,
+                joinedAt: new Date().toISOString()
+            };
+
+            // Actualizar grupos
+            groups = groups.map(group =>
+                group.id === groupId
+                    ? {
+                        ...group,
+                        participants: [...(group.participants || []), newParticipant]
+                    }
+                    : group
+            );
+
+            // Guardar en localStorage
+            try {
+                localStorage.setItem('redis-groups', JSON.stringify(groups));
+                localStorage.setItem('redis-groups-timestamp', Date.now().toString());
+                logToConsole('💾 Grupos guardados en localStorage');
+            } catch (error) {
+                logToConsole('❌ Error guardando en localStorage: ' + error.message);
+            }
+
+            // Enviar broadcast
+            if (broadcastChannel) {
+                const message = {
+                    type: 'GROUPS_UPDATED',
+                    data: groups,
+                    timestamp: Date.now()
+                };
+                broadcastChannel.postMessage(message);
+                logToConsole('📢 Mensaje broadcast enviado a todas las ventanas');
+            }
+
+            // Actualizar display
+            updateGroupsDisplay();
+
+            logToConsole(`✅ ${firstName} ${lastName} agregado al Grupo ${groupId}`);
+        }
+
+        // Limpiar todos los grupos
+        function clearAllGroups() {
+            logToConsole('🧹 Limpiando todos los grupos...');
+
+            groups = GROUPS_CONFIG.map(group => ({
+                ...group,
+                participants: []
+            }));
+
+            // Guardar en localStorage
+            localStorage.setItem('redis-groups', JSON.stringify(groups));
+            localStorage.setItem('redis-groups-timestamp', Date.now().toString());
+
+            // Enviar broadcast
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({
+                    type: 'GROUPS_UPDATED',
+                    data: groups,
+                    timestamp: Date.now()
+                });
+            }
+
+            updateGroupsDisplay();
+            logToConsole('✅ Todos los grupos han sido limpiados');
+        }
+
+        // Recargar grupos desde localStorage
+        function loadGroups() {
+            logToConsole('🔄 Recargando grupos desde localStorage...');
+
+            try {
+                const stored = localStorage.getItem('redis-groups');
+                if (stored) {
+                    groups = JSON.parse(stored);
+                    updateGroupsDisplay();
+                    logToConsole('✅ Grupos recargados exitosamente');
+                } else {
+                    logToConsole('⚠️ No hay datos en localStorage');
+                }
+            } catch (error) {
+                logToConsole('❌ Error recargando grupos: ' + error.message);
+            }
+        }
+
+        // Limpiar console
+        function clearConsole() {
+            document.getElementById('debug-console').innerHTML = '';
+            logToConsole('Console limpiado');
+        }
+
+        // Inicializar cuando se carga la página
+        window.addEventListener('load', init);
+
+        // Actualizar cada 2 segundos para detectar cambios externos
+        setInterval(() => {
+            const stored = localStorage.getItem('redis-groups');
+            if (stored) {
+                try {
+                    const storedGroups = JSON.parse(stored);
+                    if (JSON.stringify(storedGroups) !== JSON.stringify(groups)) {
+                        logToConsole('🔄 Detectados cambios externos en localStorage');
+                        groups = storedGroups;
+                        updateGroupsDisplay();
+                    }
+                } catch (error) {
+                    // Silently ignore parsing errors
+                }
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

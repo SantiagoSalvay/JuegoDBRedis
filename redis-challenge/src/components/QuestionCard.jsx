@@ -1,7 +1,12 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 
-const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) => {
+const QuestionCard = ({
+  question,
+  questionNumber,
+  totalQuestions,
+  onAnswer,
+}) => {
   const [selectedOption, setSelectedOption] = useState(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
@@ -27,18 +32,18 @@ const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) =>
 
   const getOptionStyle = (option) => {
     if (!isAnswered) {
-      return 'bg-redis-gray hover:bg-redis-red/20 hover:border-redis-red border-2 border-transparent';
+      return "bg-redis-gray hover:bg-redis-red/20 hover:border-redis-red border-2 border-transparent";
     }
 
     if (option === question.answer) {
-      return 'bg-green-600 border-2 border-green-400 glow-green';
+      return "bg-green-600 border-2 border-green-400 glow-green";
     }
 
     if (option === selectedOption && !isCorrect) {
-      return 'bg-red-600 border-2 border-red-400';
+      return "bg-red-600 border-2 border-red-400";
     }
 
-    return 'bg-redis-gray opacity-50';
+    return "bg-redis-gray opacity-50";
   };
 
   const containerVariants = {
@@ -46,18 +51,18 @@ const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) =>
     visible: {
       opacity: 1,
       x: 0,
-      transition: { duration: 0.5, ease: 'easeOut' }
+      transition: { duration: 0.5, ease: "easeOut" },
     },
     exit: {
       opacity: 0,
       x: -100,
-      transition: { duration: 0.3 }
-    }
+      transition: { duration: 0.3 },
+    },
   };
 
   const shakeAnimation = {
     x: [0, -10, 10, -10, 10, 0],
-    transition: { duration: 0.5 }
+    transition: { duration: 0.5 },
   };
 
   return (
@@ -66,7 +71,7 @@ const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) =>
       initial="hidden"
       animate="visible"
       exit="exit"
-      className="flex flex-col items-center justify-center min-h-screen px-4 pt-32 pb-8"
+      className="flex flex-col items-center justify-center h-screen w-screen px-4 pt-20 pb-8 overflow-y-auto"
     >
       <motion.div
         className="w-full max-w-3xl bg-redis-gray rounded-2xl p-8 md:p-12 shadow-2xl"
@@ -105,8 +110,8 @@ const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) =>
               onClick={() => handleOptionClick(option)}
               disabled={isAnswered}
               className={`w-full text-left p-4 md:p-6 rounded-xl font-medium text-base md:text-lg transition-all duration-300 ${getOptionStyle(
-                option
-              )} ${!isAnswered ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                option,
+              )} ${!isAnswered ? "cursor-pointer" : "cursor-not-allowed"}`}
             >
               <div className="flex items-center gap-4">
                 <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-redis-black rounded-full text-sm font-bold">
@@ -143,8 +148,8 @@ const QuestionCard = ({ question, questionNumber, totalQuestions, onAnswer }) =>
             animate={{ opacity: 1, y: 0 }}
             className={`mt-6 p-4 rounded-xl text-center font-semibold text-lg ${
               isCorrect
-                ? 'bg-green-600/20 text-green-400 border-2 border-green-600'
-                : 'bg-red-600/20 text-red-400 border-2 border-red-600'
+                ? "bg-green-600/20 text-green-400 border-2 border-green-600"
+                : "bg-red-600/20 text-red-400 border-2 border-red-600"
             }`}
           >
             {isCorrect ? (

@@ -1,12 +1,12 @@
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 
-const StartScreen = ({ onStart }) => {
+const StartScreen = ({ onStart, groupInfo }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="flex flex-col items-center justify-center min-h-screen px-4"
+      className="flex flex-col items-center justify-center h-screen w-screen px-4 overflow-y-auto"
     >
       <motion.div
         initial={{ scale: 0.8 }}
@@ -14,6 +14,24 @@ const StartScreen = ({ onStart }) => {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="text-center"
       >
+        {groupInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="inline-flex items-center gap-3 bg-redis-gray rounded-full px-6 py-3">
+              <div
+                className="w-4 h-4 rounded-full"
+                style={{ backgroundColor: groupInfo.group.color }}
+              />
+              <span className="text-lg font-bold text-white">
+                Grupo {groupInfo.groupId} - {groupInfo.group.name}
+              </span>
+            </div>
+          </motion.div>
+        )}
+
         <motion.h1
           className="text-6xl md:text-8xl font-bold mb-4 text-glow-red"
           animate={{
