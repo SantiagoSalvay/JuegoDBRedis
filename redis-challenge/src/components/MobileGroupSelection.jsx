@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import WaitingScreen from "./WaitingScreen";
 
 const MobileGroupSelection = ({ groups, joinGroup }) => {
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -7,6 +8,9 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
   const [lastName, setLastName] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
+  const [joinedGroup, setJoinedGroup] = useState(null);
+  const [participantName, setParticipantName] = useState("");
 
   const handleGroupSelect = (group) => {
     setSelectedGroup(group);
@@ -48,8 +52,13 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
       console.log("👥 Participantes antes:", beforeCount);
 
       joinGroup(selectedGroup.id, participant);
-
-      // Verificar después de un momento
+      
+      // Guardar información del grupo y participante para mostrar en la pantalla de espera
+      setJoinedGroup(selectedGroup);
+      setParticipantName(`${participant.firstName} ${participant.lastName}`);
+      setHasJoined(true);
+      
+      // Verificar estado después de unirse
       setTimeout(() => {
         const afterGroups = JSON.parse(
           localStorage.getItem("redis-groups") || "[]",
@@ -60,17 +69,10 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
         console.log("👥 Participantes después:", afterCount);
 
         if (afterCount > beforeCount) {
-          console.log(
-            "✅ Participante agregado correctamente, redirigiendo...",
-          );
+          console.log("✅ Participante agregado correctamente");
         } else {
           console.warn("⚠️ No se detectó el cambio en localStorage");
         }
-
-        // Redirigir
-        const newURL = `${window.location.origin}${window.location.pathname}?group=${selectedGroup.id}`;
-        console.log("🔄 Redirigiendo a:", newURL);
-        window.location.href = newURL;
       }, 1000);
     } catch (error) {
       console.error("❌ Error joining group:", error);
@@ -86,6 +88,17 @@ const MobileGroupSelection = ({ groups, joinGroup }) => {
     setLastName("");
   };
 
+  // Mostrar pantalla de espera después de unirse
+  if (hasJoined && joinedGroup) {
+    return (
+      <WaitingScreen 
+        groupName={joinedGroup.name} 
+        participantName={participantName}
+      />
+    );
+  }
+
+  // Mostrar formulario de registro
   if (isRegistering && selectedGroup) {
     return (
       <div className="min-h-screen w-full bg-redis-black p-3 sm:p-4 md:p-6 flex flex-col justify-center overflow-y-auto">

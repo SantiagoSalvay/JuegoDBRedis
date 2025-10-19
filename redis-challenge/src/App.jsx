@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import StartScreen from "./components/StartScreen";
 import QuestionCard from "./components/QuestionCard";
 import ScoreBoard from "./components/ScoreBoard";
@@ -59,87 +59,246 @@ function App() {
   const loadGroupsFromStorage = () => {
     try {
       const storedGroups = localStorage.getItem("redis-groups");
-      const storedTimestamp = localStorage.getItem("redis-groups-timestamp");
-
-      if (storedGroups && storedTimestamp) {
-        const timestamp = parseInt(storedTimestamp);
-        if (timestamp > lastUpdate) {
-          const parsedGroups = JSON.parse(storedGroups);
-          console.log(
-            "🔄 Loading groups from storage:",
-            parsedGroups.filter((g) => g.participants?.length > 0),
-          );
-          setGroups(parsedGroups);
-          setLastUpdate(timestamp);
-          return true;
-        }
+      if (!storedGroups) return false;
+      
+      const parsedData = JSON.parse(storedGroups);
+      
+      // Manejar tanto el formato antiguo (array) como el nuevo (objeto con grupos)
+      const groupsToSet = Array.isArray(parsedData) 
+        ? parsedData 
+        : (parsedData.groups || []);
+      
+      // Verificar que los grupos tengan la estructura esperada
+      if (Array.isArray(groupsToSet) && groupsToSet.length > 0) {
+        // Asegurarse de que cada grupo tenga los campos necesarios
+        const validatedGroups = groupsToSet.map(group => ({
+          id: group.id || 0,
+          name: group.name || 'Grupo sin nombre',
+          color: group.color || '#666666',
+          participants: Array.isArray(group.participants) ? group.participants : [],
+          competitionStarted: !!group.competitionStarted,
+          lastUpdated: group.lastUpdated || new Date().toISOString()
+        }));
+        
+        setGroups(validatedGroups);
+        setLastUpdate(Date.now());
+        return true;
       }
+      
+      return false;
     } catch (error) {
-      console.error("❌ Error loading groups:", error);
+      console.error("❌ Error cargando grupos:", error);
+      return false;
     }
-    return false;
   };
 
   // Función para guardar grupos en localStorage
-  const saveGroupsToStorage = (newGroups) => {
+  const saveGroupsToStorage = async (newGroups) => {
     try {
       const timestamp = Date.now();
+      
+      // Guardar los grupos directamente sin anidarlos en un objeto
       localStorage.setItem("redis-groups", JSON.stringify(newGroups));
-      localStorage.setItem("redis-groups-timestamp", timestamp.toString());
+      localStorage.setItem("redis-groups-last-updated", timestamp);
+      
+      // Actualizar el estado local
       setLastUpdate(timestamp);
-      console.log(
-        "💾 Groups saved to storage:",
-        newGroups.filter((g) => g.participants?.length > 0),
-      );
+      
+      // Pequeño delay para asegurar que el estado se actualice
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      return true;
     } catch (error) {
-      console.error("❌ Error saving groups:", error);
+      console.error('❌ Error guardando grupos en localStorage:', error);
+      return false;
     }
   };
 
   // Inicialización
   useEffect(() => {
-    // Generar session ID
+    console.log('🔍 Initializing app...');
+    
+    // 1. Generar o recuperar session ID
     let storedSessionId = localStorage.getItem("redis-session-id");
     if (!storedSessionId) {
       storedSessionId = Math.random().toString(36).substr(2, 9);
       localStorage.setItem("redis-session-id", storedSessionId);
+      console.log('🆕 New session ID generated:', storedSessionId);
+    } else {
+      console.log('🔑 Existing session ID:', storedSessionId);
     }
     setSessionId(storedSessionId);
 
-    // Cargar grupos iniciales
+    // 2. Resetear estado del juego
+    console.log('🔄 Resetting game state...');
+    setCompetitionStarted(false);
+    setGameStarted(false);
+    setGameQuestions([]);
+    setCurrentQuestion(0);
+    setScore(0);
+    setShowResults(false);
+    setStreak(0);
+
+    // 3. Cargar grupos
+    console.log('📂 Loading groups...');
     loadGroupsFromStorage();
 
-    // Detectar modo según URL
+    // 4. Detectar modo según URL
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get("mode");
-    const groupId = urlParams.get("group");
+    const mode = urlParams.get('mode');
+    console.log('🌐 URL mode detected:', mode || 'default');
 
-    if (mode === "mobile") {
-      setGameMode("mobile");
-    } else if (groupId) {
-      setGameMode("playing");
-      const group = GROUPS_CONFIG.find((g) => g.id === parseInt(groupId));
-      if (group) {
-        setCurrentUser({ groupId: parseInt(groupId), group });
-      }
-    } else {
-      setGameMode("dashboard");
-    }
-  }, []);
-
-  // Polling cada segundo para sincronización
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (gameMode === "dashboard") {
-        const updated = loadGroupsFromStorage();
-        if (updated) {
-          console.log("🕐 Groups updated via polling");
+    if (mode === 'dashboard') {
+      console.log('🖥️ Setting dashboard mode');
+      setGameMode('dashboard');
+      
+      // Limpiar cualquier estado de competencia previo
+      localStorage.removeItem('redis-competition');
+    } else if (mode === 'mobile') {
+      console.log('📱 Setting mobile mode');
+      setGameMode('mobile');
+      
+      // Intentar cargar usuario desde localStorage
+      const storedUser = localStorage.getItem('redis-current-user');
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser);
+          console.log('👤 Loaded user from storage:', user.name);
+          setCurrentUser(user);
+          setGameMode('playing');
+        } catch (e) {
+          console.error('❌ Error parsing stored user:', e);
+          localStorage.removeItem('redis-current-user');
         }
       }
-    }, 1000); // Polling cada 1 segundo
+    }
 
-    return () => clearInterval(interval);
-  }, [gameMode, lastUpdate]);
+    // 5. Verificar si hay una competencia en curso
+    const competitionData = localStorage.getItem('redis-competition');
+    if (competitionData) {
+      try {
+        const compData = JSON.parse(competitionData);
+        console.log('🏁 Found competition data:', {
+          started: compData.started,
+          sessionId: compData.sessionId,
+          initializedBy: compData.initializedBy
+        });
+        
+        // Solo establecer como iniciada si la sesión coincide
+        if (compData.sessionId === storedSessionId) {
+          setCompetitionStarted(!!compData.started);
+        } else {
+          console.log('⚠️ Session ID mismatch, ignoring competition data');
+          localStorage.removeItem('redis-competition');
+        }
+      } catch (e) {
+        console.error('❌ Error parsing competition data:', e);
+        localStorage.removeItem('redis-competition');
+      }
+    } else {
+      console.log('ℹ️ No active competition found');
+    }
+    
+    console.log('✅ Initialization complete');
+  }, []);
+
+  // Efecto para sincronizar el estado del juego
+  useEffect(() => {
+    let isMounted = true;
+    
+    const syncGameState = () => {
+      if (!isMounted) return;
+      
+      // 1. Actualizar grupos
+      const updatedGroups = loadGroupsFromStorage();
+      if (updatedGroups) {
+        console.log("🔄 Groups updated");
+      }
+      
+      // 2. Verificar estado de la competencia
+      const competitionData = localStorage.getItem('redis-competition');
+      if (!competitionData) return;
+
+      try {
+        const competition = JSON.parse(competitionData);
+        
+        // Limpiar datos de competencia inválidos
+        if (!competition.initializedBy || !competition.sessionId) {
+          console.log('⚠️ Invalid competition data, cleaning up...');
+          localStorage.removeItem('redis-competition');
+          return;
+        }
+
+        const { started, sessionId: compSessionId, initializedBy } = competition;
+        
+        // Actualizar estado de la competencia solo si hay cambios
+        setCompetitionStarted(prevStarted => {
+          if (prevStarted !== started) {
+            console.log(`🔄 Competition status: ${started ? 'STARTED' : 'STOPPED'}, Session: ${compSessionId}`);
+            return started;
+          }
+          return prevStarted;
+        });
+
+        // Solo procesar si la sesión coincide
+        if (compSessionId !== sessionId) {
+          console.log(`🔀 Session ID mismatch: ${sessionId} (current) vs ${compSessionId} (stored)`);
+          return;
+        }
+
+        // Lógica para el HOST (Dashboard)
+        if (gameMode === 'dashboard') {
+          if (started && !gameStarted && initializedBy === 'host') {
+            console.log('🏁 HOST: Starting game with session:', compSessionId);
+            const shuffled = shuffleQuestions(questionsData, 'all', compSessionId);
+            setGameQuestions(shuffled);
+            setGameStarted(true);
+            setCurrentQuestion(0);
+            setScore(0);
+            setShowResults(false);
+            setStreak(0);
+          }
+          return;
+        }
+
+        // Lógica para los JUGADORES
+        if (gameMode === 'playing' && started && !gameStarted) {
+          console.log('🎮 PLAYER: Joining game with session:', compSessionId);
+          const shuffled = shuffleQuestions(questionsData, currentUser?.groupId || 'all', compSessionId);
+          
+          // Usar setTimeout para asegurar que el estado se actualice en el orden correcto
+          setTimeout(() => {
+            if (isMounted) {
+              setGameQuestions(shuffled);
+              setGameStarted(true);
+              setCurrentQuestion(0);
+              setScore(0);
+              setShowResults(false);
+              setStreak(0);
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('❌ Error processing competition data:', error);
+        if (isMounted) {
+          localStorage.removeItem('redis-competition');
+          setCompetitionStarted(false);
+        }
+      }
+    };
+    
+    // Sincronizar inmediatamente
+    syncGameState();
+    
+    // Configurar sincronización periódica
+    const interval = setInterval(syncGameState, 2000);
+
+    // Limpieza
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [gameMode, lastUpdate, currentUser?.groupId, sessionId, gameQuestions.length, gameStarted]);
 
   // Función para unirse a un grupo
   const joinGroup = (groupId, participant) => {
@@ -200,8 +359,84 @@ function App() {
     setStreak(0);
   };
 
-  const handleStartCompetition = () => {
+  // Función para reiniciar la competencia
+  const resetCompetition = async () => {
+    if (window.confirm('¿Estás seguro de que quieres reiniciar la competencia? Esto desconectará a todos los jugadores.')) {
+      console.log('🔄 Resetting competition...');
+      
+      // Limpiar el estado de la competencia
+      setCompetitionStarted(false);
+      setGameStarted(false);
+      setGameQuestions([]);
+      
+      // Limpiar el almacenamiento local
+      localStorage.removeItem('redis-competition');
+      
+      // Actualizar el estado de los grupos
+      const updatedGroups = groups.map(group => ({
+        ...group,
+        competitionStarted: false,
+        lastUpdated: new Date().toISOString()
+      }));
+      
+      setGroups(updatedGroups);
+      await saveGroupsToStorage(updatedGroups);
+      
+      console.log('✅ Competition reset complete');
+    }
+  };
+
+  const handleStartCompetition = async () => {
+    console.log('🔵 handleStartCompetition called');
+    
+    // 1. Clear any existing game state
+    setGameQuestions([]);
+    setGameStarted(false);
+    setCurrentQuestion(0);
+    setScore(0);
+    setShowResults(false);
+    setStreak(0);
+    
+    // 2. Create a new session ID for this game
+    const gameSessionId = Math.random().toString(36).substr(2, 9);
+    setSessionId(gameSessionId);
+    localStorage.setItem("redis-session-id", gameSessionId);
+    
+    // 3. Prepare competition data
+    const competitionData = {
+      started: true,
+      startedAt: new Date().toISOString(),
+      sessionId: gameSessionId,
+      initializedBy: 'host',
+      lastUpdated: Date.now()
+    };
+    
+    // 4. Save competition data to local storage
+    localStorage.setItem('redis-competition', JSON.stringify(competitionData));
+    console.log('🏁 Competition data saved:', competitionData);
+    
+    // 5. Update local state
     setCompetitionStarted(true);
+    
+    // 6. Update groups with competition status
+    const updatedGroups = groups.map(group => ({
+      ...group,
+      competitionStarted: true,
+      lastUpdated: new Date().toISOString()
+    }));
+    
+    // 7. Save groups to storage
+    setGroups(updatedGroups);
+    await saveGroupsToStorage(updatedGroups);
+    
+    // 8. Initialize game questions (this will be picked up by the sync effect)
+    const shuffled = shuffleQuestions(questionsData, 'all', gameSessionId);
+    setGameQuestions(shuffled);
+    
+    // 9. Force a re-render to ensure state is updated
+    setLastUpdated(Date.now());
+    
+    console.log('✅ Game started successfully with session:', gameSessionId);
   };
 
   const handleAnswer = (isCorrect) => {
@@ -261,29 +496,51 @@ function App() {
   // Renderizado según el modo
   if (gameMode === "dashboard") {
     if (!competitionStarted) {
-      return <Dashboard {...dashboardProps} />;
+      return <Dashboard 
+        {...dashboardProps} 
+        competitionStarted={competitionStarted}
+        onResetCompetition={resetCompetition}
+      />;
     } else {
       return (
-        <div className="min-h-screen bg-redis-black flex items-center justify-center p-4">
-          <div className="text-center">
-            <div className="text-8xl mb-8">🚀</div>
-            <h1 className="text-6xl font-bold text-redis-red mb-4 text-glow-red">
-              ¡Competencia en Progreso!
-            </h1>
-            <p className="text-2xl text-gray-300 mb-8">
-              Los grupos están respondiendo las preguntas sobre Redis
-            </p>
-            <div className="bg-redis-gray rounded-2xl p-8 max-w-md mx-auto">
-              <p className="text-lg text-gray-300 mb-4">
-                Los participantes están jugando desde sus dispositivos móviles
+        <div className="min-h-screen bg-redis-black p-4">
+          {/* Botón de volver al dashboard */}
+          <div className="max-w-7xl mx-auto mb-8">
+            <button
+              onClick={() => {
+                setGameMode('dashboard');
+                setCompetitionStarted(false);
+              }}
+              className="bg-redis-gray hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 flex items-center gap-2"
+            >
+              ← Volver al Dashboard
+            </button>
+          </div>
+          
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] -mt-16">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="text-center"
+            >
+              <div className="text-8xl mb-6 animate-bounce">🚀</div>
+              <h1 className="text-5xl md:text-7xl font-bold text-redis-red mb-4 text-glow-red">
+                ¡Competencia en Progreso!
+              </h1>
+              <p className="text-2xl md:text-3xl text-gray-300 mb-12 max-w-2xl mx-auto">
+                Los grupos están respondiendo las preguntas sobre Redis
               </p>
-              <button
-                onClick={() => setCompetitionStarted(false)}
-                className="bg-redis-red hover:bg-red-700 text-white font-bold px-6 py-3 rounded-full transition-colors"
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={resetCompetition}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-full text-xl shadow-lg transition-all duration-300"
               >
-                ← Volver al Dashboard
-              </button>
-            </div>
+                🔄 Terminar Competencia
+              </motion.button>
+            </motion.div>
           </div>
         </div>
       );
@@ -291,6 +548,26 @@ function App() {
   }
 
   if (gameMode === "mobile") {
+    // If we have a group in the URL and the game hasn't started yet
+    const urlParams = new URLSearchParams(window.location.search);
+    const groupId = urlParams.get('group');
+    
+    if (groupId && !gameStarted) {
+      // Show waiting screen if game hasn't started yet
+      const group = groups.find(g => g.id === groupId);
+      const participantName = urlParams.get('name') || 'Jugador';
+      
+      if (group) {
+        return (
+          <WaitingScreen 
+            groupName={group.name} 
+            participantName={participantName}
+          />
+        );
+      }
+    }
+    
+    // Otherwise show group selection
     return <MobileGroupSelection {...mobileGroupSelectionProps} />;
   }
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
 
-const Dashboard = ({ groups, sessionId, onStartGame, clearGroups }) => {
+const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionStarted, onResetCompetition }) => {
   const [currentURL, setCurrentURL] = useState("");
 
   useEffect(() => {
@@ -218,44 +218,59 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups }) => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="text-center space-y-3 sm:space-y-4 flex-shrink-0"
+              className="text-center space-y-4 sm:space-y-6 flex-shrink-0"
             >
-              {/* Start Game Button */}
-              <div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={onStartGame}
-                  className="bg-gradient-to-r from-redis-red to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold text-lg sm:text-xl md:text-2xl px-6 sm:px-8 md:px-12 py-3 sm:py-4 md:py-6 rounded-full shadow-2xl transition-all duration-300 glow-red w-full sm:w-auto"
-                >
-                  🚀 ¡Comenzar Competencia!
-                </motion.button>
-
-                <p className="text-gray-400 mt-2 sm:mt-4 text-sm sm:text-base md:text-lg px-2">
+              {/* Game Status */}
+              <div className="mb-2">
+                <p className="text-gray-400 text-sm sm:text-base md:text-lg">
                   {getGroupsWithParticipants().length} de {groups.length} grupos
-                  listos para competir
                 </p>
               </div>
 
-              {/* Control Buttons */}
-              <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4 px-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleClearGroups}
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-medium px-4 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl transition-all duration-300 text-sm sm:text-base"
-                >
-                  🗑️ Limpiar Grupos
-                </motion.button>
+              {/* Main Action Buttons */}
+              <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+                {!competitionStarted ? (
+                  <>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={onStartGame}
+                      className="bg-gradient-to-r from-redis-red to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-lg transition-all duration-300 transform w-full sm:w-auto"
+                    >
+                      🚀 Iniciar Competencia
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleClearGroups}
+                      className="bg-redis-gray hover:bg-gray-700 text-white font-bold px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-lg transition-all duration-300 transform w-full sm:w-auto"
+                    >
+                      🗑️ Limpiar Grupos
+                    </motion.button>
+                  </>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={onResetCompetition}
+                    className="bg-red-600 hover:bg-red-800 text-white font-bold px-6 sm:px-8 py-3 sm:py-4 rounded-full shadow-lg transition-all duration-300 transform w-full sm:w-auto"
+                  >
+                    🔄 Terminar Competencia
+                  </motion.button>
+                )}
+              </div>
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+              {/* Utility Buttons */}
+              <div className="pt-2">
+                <button
                   onClick={() => window.location.reload()}
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-medium px-4 sm:px-6 py-2 sm:py-3 rounded-lg sm:rounded-xl transition-all duration-300 text-sm sm:text-base"
+                  className="text-gray-400 hover:text-white text-sm font-medium transition-colors duration-200 flex items-center justify-center gap-2 mx-auto"
                 >
-                  🔄 Refrescar
-                </motion.button>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Actualizar
+                </button>
               </div>
             </motion.div>
           )}
