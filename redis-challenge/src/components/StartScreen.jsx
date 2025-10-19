@@ -61,11 +61,11 @@ const StartScreen = ({ onStart, groupInfo }) => {
         transition={{ delay: 0.5 }}
         className="max-w-2xl bg-redis-gray rounded-2xl p-8 shadow-2xl mb-8"
       >
-        <h2 className="text-2xl md:text-3xl font-semibold mb-4 text-redis-red">
-          ¿Listo para el desafío?
+        <h2 className="text-2xl md:text-3xl font-semibold mb-4 text-yellow-400">
+          ¡Estás listo, espera a que comience el juego! ⏳
         </h2>
         <p className="text-lg md:text-xl text-gray-300 mb-4">
-          Pon a prueba tus conocimientos sobre Redis con este quiz interactivo.
+          El anfitrión iniciará el juego pronto. Mientras tanto, aquí tienes algunas reglas:
         </p>
         <div className="text-left space-y-2 text-gray-400">
           <div className="flex items-center gap-2">
@@ -87,14 +87,20 @@ const StartScreen = ({ onStart, groupInfo }) => {
         </div>
       </motion.div>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onStart}
-        className="bg-redis-red hover:bg-red-700 text-white font-bold text-xl md:text-2xl px-12 py-4 rounded-full shadow-lg transition-all duration-300 glow-red"
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="mt-6 text-center"
       >
-        Comenzar 🚀
-      </motion.button>
+        <div className="inline-flex items-center gap-2 bg-yellow-400/20 text-yellow-400 px-6 py-3 rounded-full">
+          <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span className="font-medium">Esperando al anfitrión...</span>
+        </div>
+      </motion.div>
 
       <motion.div
         initial={{ opacity: 0 }}
