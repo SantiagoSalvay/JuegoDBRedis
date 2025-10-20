@@ -6,6 +6,7 @@ import ScoreBoard from "./components/ScoreBoard";
 import ResultScreen from "./components/ResultScreen";
 import Dashboard from "./components/Dashboard";
 import MobileGroupSelection from "./components/MobileGroupSelection";
+import WaitingScreen from "./components/WaitingScreen";
 import questionsData from "./data/questions.json";
 
 // Configuración de grupos
@@ -54,6 +55,9 @@ function App() {
   const [sessionId, setSessionId] = useState("");
   const [competitionStarted, setCompetitionStarted] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(0);
+
+  // BroadcastChannel para comunicación entre pestañas
+  const [gameChannel, setGameChannel] = useState(null);
 
   // Función para cargar grupos desde localStorage
   const loadGroupsFromStorage = () => {
@@ -114,53 +118,55 @@ function App() {
     }
   };
 
+  // Inicializar BroadcastChannel
+  useEffect(() => {
+    // Crear canal de comunicación
+    const channel = new BroadcastChannel('redis-game-channel');
+    setGameChannel(channel);
+
+    // Escuchar mensajes del canal
+    channel.onmessage = (event) => {
+      console.log('📡 Mensaje recibido:', event.data);
+      
+      if (event.data.type === 'START_GAME') {
+        console.log('🎮 Señal de inicio de juego recibida');
+        const { sessionId: gameSessionId } = event.data;
+        
+        // Solo procesar si estamos en modo móvil o jugando
+        if (gameMode === 'mobile' || gameMode === 'playing') {
+          console.log('📱 Iniciando juego en dispositivo móvil...');
+          
+          // IMPORTANTE: Actualizar el sessionId local para que coincida con el del host
+          setSessionId(gameSessionId);
+          localStorage.setItem('redis-session-id', gameSessionId);
+          
+          // Actualizar localStorage con los datos de la competencia
+          const competitionData = {
+            started: true,
+            startedAt: new Date().toISOString(),
+            sessionId: gameSessionId,
+            initializedBy: 'broadcast',
+            lastUpdated: Date.now()
+          };
+          localStorage.setItem('redis-competition', JSON.stringify(competitionData));
+          
+          // Forzar actualización
+          setLastUpdate(Date.now());
+        }
+      }
+    };
+
+    // Cleanup
+    return () => {
+      channel.close();
+    };
+  }, [gameMode]);
+
   // Inicialización
   useEffect(() => {
     console.log('🔍 Initializing app...');
     
-    // 1. Limpiar datos de usuarios previos al iniciar
-    console.log('🧹 Cleaning up previous session data...');
-    localStorage.removeItem('redis-current-user');
-    localStorage.removeItem('redis-user-name');
-    localStorage.removeItem('redis-group-id');
-    
-    // 2. Obtener parámetros de la URL
-    const searchParams = new URLSearchParams(window.location.search);
-    const urlSessionId = searchParams.get('session');
-    const urlMode = searchParams.get('mode');
-    
-    console.log('🌐 URL Parameters:', { urlMode, urlSessionId });
-    
-    // 2. Manejar el modo de la aplicación
-    if (urlMode === 'mobile') {
-      console.log('📱 Mobile mode detected from URL');
-      setGameMode('mobile');
-      
-      // Si hay un sessionId en la URL, usarlo
-      if (urlSessionId) {
-        console.log('🔄 Using session ID from URL:', urlSessionId);
-        localStorage.setItem("redis-session-id", urlSessionId);
-        setSessionId(urlSessionId);
-        return; // Salir temprano para móviles
-      }
-    } else {
-      // Modo dashboard por defecto
-      setGameMode('dashboard');
-    }
-    
-    // 3. Para modo dashboard o sin modo específico
-    let storedSessionId = localStorage.getItem("redis-session-id");
-    if (!storedSessionId) {
-      storedSessionId = Math.random().toString(36).substr(2, 9);
-      localStorage.setItem("redis-session-id", storedSessionId);
-      console.log('🆕 New session ID generated:', storedSessionId);
-    } else {
-      console.log('🔑 Existing session ID:', storedSessionId);
-    }
-    
-    setSessionId(storedSessionId);
-
-    // 2. Resetear estado del juego
+    // 1. Resetear estado del juego
     console.log('🔄 Resetting game state...');
     setCompetitionStarted(false);
     setGameStarted(false);
@@ -170,24 +176,28 @@ function App() {
     setShowResults(false);
     setStreak(0);
 
-    // 3. Cargar grupos
+    // 2. Cargar grupos
     console.log('📂 Loading groups...');
     loadGroupsFromStorage();
 
-    // 4. Detectar modo según URL
+    // 3. Obtener parámetros de la URL
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode');
-    console.log('🌐 URL mode detected:', mode || 'default');
+    const urlMode = urlParams.get('mode');
+    const urlSessionId = urlParams.get('session');
+    
+    console.log('🌐 URL Parameters:', { urlMode, urlSessionId });
 
-    if (mode === 'dashboard') {
-      console.log('🖥️ Setting dashboard mode');
-      setGameMode('dashboard');
-      
-      // Limpiar cualquier estado de competencia previo
-      localStorage.removeItem('redis-competition');
-    } else if (mode === 'mobile') {
-      console.log('📱 Setting mobile mode');
+    // 4. Manejar el modo de la aplicación
+    if (urlMode === 'mobile') {
+      console.log('📱 Mobile mode detected from URL');
       setGameMode('mobile');
+      
+      // Si hay un sessionId en la URL, usarlo
+      if (urlSessionId) {
+        console.log('🔄 Using session ID from URL:', urlSessionId);
+        localStorage.setItem("redis-session-id", urlSessionId);
+        setSessionId(urlSessionId);
+      }
       
       // Intentar cargar usuario desde localStorage
       const storedUser = localStorage.getItem('redis-current-user');
@@ -195,6 +205,18 @@ function App() {
         try {
           const user = JSON.parse(storedUser);
           console.log('👤 Loaded user from storage:', user.name);
+          
+          // Asegurar que el usuario tenga la estructura correcta
+          if (!user.group && user.groupId) {
+            user.group = {
+              id: user.groupId,
+              name: user.groupName || '',
+              color: user.groupColor || ''
+            };
+            console.log('🔧 Fixed user structure:', user);
+            localStorage.setItem('redis-current-user', JSON.stringify(user));
+          }
+          
           setCurrentUser(user);
           setGameMode('playing');
         } catch (e) {
@@ -202,6 +224,25 @@ function App() {
           localStorage.removeItem('redis-current-user');
         }
       }
+    } else {
+      // Modo dashboard por defecto
+      console.log('🖥️ Setting dashboard mode');
+      setGameMode('dashboard');
+      
+      // Limpiar cualquier estado de competencia previo
+      localStorage.removeItem('redis-competition');
+      
+      // Para modo dashboard, generar o usar sessionId existente
+      let storedSessionId = localStorage.getItem("redis-session-id");
+      if (!storedSessionId) {
+        storedSessionId = Math.random().toString(36).substr(2, 9);
+        localStorage.setItem("redis-session-id", storedSessionId);
+        console.log('🆕 New session ID generated:', storedSessionId);
+      } else {
+        console.log('🔑 Existing session ID:', storedSessionId);
+      }
+      
+      setSessionId(storedSessionId);
     }
 
     // 5. Verificar si hay una competencia en curso
@@ -215,12 +256,10 @@ function App() {
           initializedBy: compData.initializedBy
         });
         
-        // Solo establecer como iniciada si la sesión coincide
-        if (compData.sessionId === storedSessionId) {
+        // Para dispositivos móviles que reciben broadcast, siempre aceptar la competencia
+        if (compData.initializedBy === 'broadcast' && urlMode === 'mobile') {
+          console.log('📱 Mobile device accepting broadcast competition');
           setCompetitionStarted(!!compData.started);
-        } else {
-          console.log('⚠️ Session ID mismatch, ignoring competition data');
-          localStorage.removeItem('redis-competition');
         }
       } catch (e) {
         console.error('❌ Error parsing competition data:', e);
@@ -240,6 +279,8 @@ function App() {
     const syncGameState = () => {
       if (!isMounted) return;
       
+      console.log('🔄 Sync triggered - Mode:', gameMode, 'GameStarted:', gameStarted, 'CurrentUser:', currentUser?.name);
+      
       // 1. Actualizar grupos
       const updatedGroups = loadGroupsFromStorage();
       if (updatedGroups) {
@@ -248,7 +289,10 @@ function App() {
       
       // 2. Verificar estado de la competencia
       const competitionData = localStorage.getItem('redis-competition');
-      if (!competitionData) return;
+      if (!competitionData) {
+        console.log('ℹ️ No competition data in localStorage');
+        return;
+      }
 
       try {
         const competition = JSON.parse(competitionData);
@@ -271,10 +315,17 @@ function App() {
           return prevStarted;
         });
 
-        // Solo procesar si la sesión coincide
+        // Para jugadores que reciben broadcast, actualizar sessionId si es necesario
         if (compSessionId !== sessionId) {
-          console.log(`🔀 Session ID mismatch: ${sessionId} (current) vs ${compSessionId} (stored)`);
-          return;
+          if (initializedBy === 'broadcast') {
+            console.log(`🔄 Updating sessionId from ${sessionId} to ${compSessionId}`);
+            setSessionId(compSessionId);
+            localStorage.setItem('redis-session-id', compSessionId);
+            // No hacer return aquí, continuar con la lógica de inicio
+          } else {
+            console.log(`🔀 Session ID mismatch: ${sessionId} (current) vs ${compSessionId} (stored)`);
+            return;
+          }
         }
 
         // Lógica para el HOST (Dashboard)
@@ -294,20 +345,37 @@ function App() {
 
         // Lógica para los JUGADORES
         if (gameMode === 'playing' && started && !gameStarted) {
-          console.log('🎮 PLAYER: Joining game with session:', compSessionId);
-          const shuffled = shuffleQuestions(questionsData, currentUser?.groupId || 'all', compSessionId);
+          console.log('🎮 PLAYER: Attempting to start game...');
+          console.log('  - Session ID:', compSessionId);
+          console.log('  - Current User:', currentUser);
+          console.log('  - Game Started:', gameStarted);
+          console.log('  - Competition Started:', started);
+          console.log('  - Questions loaded:', gameQuestions.length);
           
-          // Usar setTimeout para asegurar que el estado se actualice en el orden correcto
-          setTimeout(() => {
-            if (isMounted) {
-              setGameQuestions(shuffled);
-              setGameStarted(true);
-              setCurrentQuestion(0);
-              setScore(0);
-              setShowResults(false);
-              setStreak(0);
-            }
-          }, 100);
+          if (!currentUser) {
+            console.warn('⚠️ Current user not found, cannot start game');
+            return;
+          }
+          
+          // Evitar iniciar el juego si ya hay preguntas cargadas
+          if (gameQuestions.length > 0) {
+            console.log('⚠️ Questions already loaded, skipping initialization');
+            return;
+          }
+          
+          console.log('✅ Starting game for player:', currentUser.name);
+          const shuffled = shuffleQuestions(questionsData, currentUser.groupId || 'all', compSessionId);
+          
+          console.log('📝 Setting game state...');
+          // Actualizar estado inmediatamente
+          setGameQuestions(shuffled);
+          setGameStarted(true);
+          setCurrentQuestion(0);
+          setScore(0);
+          setShowResults(false);
+          setStreak(0);
+          
+          console.log('🎮 Game started with', shuffled.length, 'questions');
         }
       } catch (error) {
         console.error('❌ Error processing competition data:', error);
@@ -362,6 +430,29 @@ function App() {
 
     setGroups(updatedGroups);
     saveGroupsToStorage(updatedGroups);
+
+    // Guardar información del usuario actual
+    const selectedGroup = updatedGroups.find((g) => g.id === groupId);
+    const userInfo = {
+      ...newParticipant,
+      groupId: groupId,
+      groupName: selectedGroup?.name || '',
+      groupColor: selectedGroup?.color || '',
+      name: `${participant.firstName} ${participant.lastName}`,
+      group: {
+        id: groupId,
+        name: selectedGroup?.name || '',
+        color: selectedGroup?.color || ''
+      }
+    };
+    
+    console.log("💾 Saving current user:", userInfo);
+    localStorage.setItem('redis-current-user', JSON.stringify(userInfo));
+    setCurrentUser(userInfo);
+    
+    // Cambiar a modo playing
+    setGameMode('playing');
+    console.log("✅ User joined group and mode changed to 'playing'");
 
     return updatedGroups;
   };
@@ -446,26 +537,37 @@ function App() {
     localStorage.setItem('redis-competition', JSON.stringify(competitionData));
     console.log('🏁 Competition data saved:', competitionData);
     
-    // 5. Update local state
+    // 5. 📡 ENVIAR MENSAJE A TODOS LOS DISPOSITIVOS VÍA BROADCASTCHANNEL
+    if (gameChannel) {
+      const message = {
+        type: 'START_GAME',
+        sessionId: gameSessionId,
+        timestamp: Date.now()
+      };
+      gameChannel.postMessage(message);
+      console.log('📡 Mensaje de inicio enviado a todos los dispositivos:', message);
+    }
+    
+    // 6. Update local state
     setCompetitionStarted(true);
     
-    // 6. Update groups with competition status
+    // 7. Update groups with competition status
     const updatedGroups = groups.map(group => ({
       ...group,
       competitionStarted: true,
       lastUpdated: new Date().toISOString()
     }));
     
-    // 7. Save groups to storage
+    // 8. Save groups to storage
     setGroups(updatedGroups);
     await saveGroupsToStorage(updatedGroups);
     
-    // 8. Initialize game questions (this will be picked up by the sync effect)
+    // 9. Initialize game questions (this will be picked up by the sync effect)
     const shuffled = shuffleQuestions(questionsData, 'all', gameSessionId);
     setGameQuestions(shuffled);
     
-    // 9. Force a re-render to ensure state is updated
-    setLastUpdated(Date.now());
+    // 10. Force a re-render to ensure state is updated
+    setLastUpdate(Date.now());
     
     console.log('✅ Game started successfully with session:', gameSessionId);
   };
@@ -603,18 +705,37 @@ function App() {
   }
 
   if (gameMode === "playing") {
+    console.log('🎨 Rendering playing mode:', {
+      gameStarted,
+      showResults,
+      currentUser: currentUser?.name,
+      questionsCount: gameQuestions.length
+    });
+
+    // Si el juego no ha comenzado, mostrar pantalla de espera
+    if (!gameStarted && !showResults && currentUser) {
+      console.log('⏳ Showing WaitingScreen');
+      return (
+        <WaitingScreen 
+          groupName={currentUser.groupName} 
+          participantName={currentUser.name}
+        />
+      );
+    }
+
+    console.log('🎮 Rendering game screen');
+    
+    const shouldShowQuestions = gameStarted && !showResults && gameQuestions.length > 0;
+    console.log('📊 Should show questions?', shouldShowQuestions, {
+      gameStarted,
+      showResults,
+      questionsLength: gameQuestions.length
+    });
+    
     return (
       <div className="min-h-screen bg-redis-black">
         <AnimatePresence mode="wait">
-          {!gameStarted && !showResults && (
-            <StartScreen
-              key="start"
-              onStart={handleStart}
-              groupInfo={currentUser}
-            />
-          )}
-
-          {gameStarted && !showResults && gameQuestions.length > 0 && (
+          {shouldShowQuestions && (
             <>
               <ScoreBoard
                 key="scoreboard"
