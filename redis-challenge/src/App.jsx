@@ -232,17 +232,11 @@ function App() {
       // Limpiar cualquier estado de competencia previo
       localStorage.removeItem('redis-competition');
       
-      // Para modo dashboard, generar o usar sessionId existente
-      let storedSessionId = localStorage.getItem("redis-session-id");
-      if (!storedSessionId) {
-        storedSessionId = Math.random().toString(36).substr(2, 9);
-        localStorage.setItem("redis-session-id", storedSessionId);
-        console.log('🆕 New session ID generated:', storedSessionId);
-      } else {
-        console.log('🔑 Existing session ID:', storedSessionId);
-      }
-      
-      setSessionId(storedSessionId);
+      // Para modo dashboard, SIEMPRE generar un nuevo sessionId al recargar
+      const newSessionId = Math.random().toString(36).substr(2, 9);
+      localStorage.setItem("redis-session-id", newSessionId);
+      setSessionId(newSessionId);
+      console.log('🆕 New session ID generated:', newSessionId);
     }
 
     // 5. Verificar si hay una competencia en curso
