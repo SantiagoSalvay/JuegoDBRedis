@@ -8,6 +8,7 @@ import Dashboard from "./components/Dashboard";
 import MobileGroupSelection from "./components/MobileGroupSelection";
 import WaitingScreen from "./components/WaitingScreen";
 import questionsData from "./data/questions.json";
+import { useFirebaseSync, useCompetitionSync } from './hooks/useFirebaseSync';
 
 // Configuración de grupos
 const GROUPS_CONFIG = [
@@ -58,6 +59,27 @@ function App() {
 
   // BroadcastChannel para comunicación entre pestañas
   const [gameChannel, setGameChannel] = useState(null);
+
+  // 🔥 Firebase: Sincronización de grupos en tiempo real
+  const { saveGroupsToFirebase } = useFirebaseSync(
+    sessionId,
+    groups,
+    setGroups,
+    gameMode
+  );
+
+  // 🔥 Firebase: Sincronización de competencia en tiempo real
+  const { saveCompetitionToFirebase } = useCompetitionSync(
+    sessionId,
+    (competitionData) => {
+      // Callback cuando cambia el estado de la competencia desde Firebase
+      if (gameMode === 'mobile' || gameMode === 'playing') {
+        console.log('🔥 Competition update received from Firebase:', competitionData);
+        localStorage.setItem('redis-competition', JSON.stringify(competitionData));
+        setLastUpdate(Date.now());
+      }
+    }
+  );
 
   // Función para cargar grupos desde localStorage
   const loadGroupsFromStorage = () => {
@@ -423,7 +445,7 @@ function App() {
     });
 
     setGroups(updatedGroups);
-    saveGroupsToStorage(updatedGroups);
+    saveGroupsToFirebase(updatedGroups);
 
     // Guardar información del usuario actual
     const selectedGroup = updatedGroups.find((g) => g.id === groupId);
@@ -458,7 +480,7 @@ function App() {
       participants: [],
     }));
     setGroups(resetGroups);
-    saveGroupsToStorage(resetGroups);
+    saveGroupsToFirebase(resetGroups);
   };
 
   // Funciones del juego
@@ -496,7 +518,7 @@ function App() {
       }));
       
       setGroups(updatedGroups);
-      await saveGroupsToStorage(updatedGroups);
+      await saveGroupsToFirebase(updatedGroups);
       
       console.log('✅ Competition reset complete');
     }
@@ -531,6 +553,10 @@ function App() {
     localStorage.setItem('redis-competition', JSON.stringify(competitionData));
     console.log('🏁 Competition data saved:', competitionData);
     
+    // 4b. 🔥 Save competition data to Firebase for cross-device sync
+    await saveCompetitionToFirebase(competitionData);
+    console.log('🔥 Competition data synced to Firebase');
+    
     // 5. 📡 ENVIAR MENSAJE A TODOS LOS DISPOSITIVOS VÍA BROADCASTCHANNEL
     if (gameChannel) {
       const message = {
@@ -552,9 +578,9 @@ function App() {
       lastUpdated: new Date().toISOString()
     }));
     
-    // 8. Save groups to storage
+    // 8. Save groups to Firebase
     setGroups(updatedGroups);
-    await saveGroupsToStorage(updatedGroups);
+    await saveGroupsToFirebase(updatedGroups);
     
     // 9. Initialize game questions (this will be picked up by the sync effect)
     const shuffled = shuffleQuestions(questionsData, 'all', gameSessionId);
