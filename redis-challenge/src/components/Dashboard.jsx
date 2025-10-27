@@ -18,13 +18,13 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
 
   const getTotalParticipants = () => {
     return groups.reduce(
-      (total, group) => total + group.participants.length,
+      (total, group) => total + (group.participants?.length || 0),
       0,
     );
   };
 
   const getGroupsWithParticipants = () => {
-    return groups.filter((group) => group.participants.length > 0);
+    return groups.filter((group) => (group.participants?.length || 0) > 0);
   };
 
   const handleClearGroups = () => {
@@ -137,7 +137,7 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
                       className={`rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-6 border-2 transition-all duration-300 ${
-                        group.participants.length > 0
+                        (group.participants?.length || 0) > 0
                           ? "bg-green-900/20 border-green-500 shadow-lg"
                           : "bg-redis-black border-gray-600"
                       }`}
@@ -154,12 +154,12 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                         </div>
                         <div
                           className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold flex-shrink-0 ${
-                            group.participants.length > 0
+                            (group.participants?.length || 0) > 0
                               ? "bg-green-600 text-white"
                               : "bg-gray-600 text-gray-300"
                           }`}
                         >
-                          {group.participants.length} 👥
+                          {group.participants?.length || 0} 👥
                         </div>
                       </div>
 
@@ -172,13 +172,13 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                         </h4>
                       </div>
 
-                      {group.participants.length > 0 ? (
+                      {(group.participants?.length || 0) > 0 ? (
                         <div className="space-y-1 sm:space-y-2">
                           <h5 className="text-xs sm:text-sm font-semibold text-gray-400 mb-1 sm:mb-2">
                             Participantes:
                           </h5>
                           <div className="max-h-16 sm:max-h-20 md:max-h-24 overflow-y-auto space-y-1">
-                            {group.participants
+                            {(group.participants || [])
                               .slice(0, 3)
                               .map((participant, idx) => (
                                 <motion.div
@@ -193,9 +193,9 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                                   {participant.lastName}
                                 </motion.div>
                               ))}
-                            {group.participants.length > 3 && (
+                            {(group.participants?.length || 0) > 3 && (
                               <div className="text-xs text-gray-500 px-2 sm:px-3">
-                                +{group.participants.length - 3} más...
+                                +{(group.participants?.length || 0) - 3} más...
                               </div>
                             )}
                           </div>

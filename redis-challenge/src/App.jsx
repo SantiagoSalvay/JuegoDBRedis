@@ -535,10 +535,10 @@ function App() {
     setShowResults(false);
     setStreak(0);
     
-    // 2. Create a new session ID for this game
-    const gameSessionId = Math.random().toString(36).substr(2, 9);
-    setSessionId(gameSessionId);
-    localStorage.setItem("redis-session-id", gameSessionId);
+    // 2. USAR EL MISMO sessionId (NO crear uno nuevo)
+    // Los móviles ya están conectados con este sessionId del QR
+    const gameSessionId = sessionId; // Usar el sessionId existente
+    console.log('🎮 Using existing session ID:', gameSessionId);
     
     // 3. Prepare competition data
     const competitionData = {
@@ -593,6 +593,13 @@ function App() {
   };
 
   const handleAnswer = (isCorrect) => {
+    console.log('🎯 handleAnswer called:', { 
+      isCorrect, 
+      currentQuestion, 
+      totalQuestions: gameQuestions.length,
+      nextQuestionIndex: currentQuestion + 1
+    });
+    
     if (isCorrect) {
       let points = 10;
       const newStreak = streak + 1;
@@ -608,8 +615,30 @@ function App() {
     }
 
     if (currentQuestion < gameQuestions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
+      const nextIndex = currentQuestion + 1;
+      const nextQuestion = gameQuestions[nextIndex];
+      
+      console.log('➡️ Avanzando a siguiente pregunta:', {
+        nextIndex,
+        hasNextQuestion: !!nextQuestion,
+        questionText: nextQuestion?.question?.substring(0, 50) || 'UNDEFINED'
+      });
+      
+      // Verificar que la siguiente pregunta existe antes de avanzar
+      if (nextQuestion) {
+        setCurrentQuestion(nextIndex);
+      } else {
+        console.error('❌ La siguiente pregunta no existe en el array!');
+        console.log('📋 Array completo:', gameQuestions.map((q, i) => ({
+          index: i,
+          exists: !!q,
+          question: q?.question?.substring(0, 30) || 'UNDEFINED'
+        })));
+        // Forzar a mostrar resultados si no hay siguiente pregunta
+        setShowResults(true);
+      }
     } else {
+      console.log('🏁 Última pregunta, mostrando resultados');
       setShowResults(true);
     }
   };
@@ -746,16 +775,81 @@ function App() {
     console.log('🎮 Rendering game screen');
     
     const shouldShowQuestions = gameStarted && !showResults && gameQuestions.length > 0;
+    const currentQuestionData = gameQuestions[currentQuestion];
+    
     console.log('📊 Should show questions?', shouldShowQuestions, {
       gameStarted,
       showResults,
-      questionsLength: gameQuestions.length
+      questionsLength: gameQuestions.length,
+      currentQuestion,
+      hasCurrentQuestion: !!currentQuestionData
     });
+    
+    // Si no hay pregunta actual, mostrar error detallado
+    if (shouldShowQuestions && !currentQuestionData) {
+      console.error('❌ Error: No hay pregunta en el índice', currentQuestion);
+      return (
+        <div className="min-h-screen bg-redis-black flex items-center justify-center p-4">
+          <div className="text-white text-center max-w-md bg-redis-gray rounded-xl p-8">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold mb-4">Error cargando pregunta</h2>
+            <div className="bg-redis-black rounded-lg p-4 mb-4 text-left">
+              <p className="text-gray-400 text-sm mb-2">🔍 Información de debug:</p>
+              <p className="text-redis-red font-mono text-xs mb-1">
+                Pregunta actual: {currentQuestion + 1}
+              </p>
+              <p className="text-redis-red font-mono text-xs mb-1">
+                Total preguntas: {gameQuestions.length}
+              </p>
+              <p className="text-redis-red font-mono text-xs mb-1">
+                Índice: {currentQuestion} (debe ser {'<'} {gameQuestions.length})
+              </p>
+              <p className="text-redis-red font-mono text-xs">
+                Estado: gameStarted={gameStarted.toString()}, showResults={showResults.toString()}
+              </p>
+            </div>
+            <p className="text-gray-300 mb-6">
+              La pregunta {currentQuestion + 1} no está disponible en el array de preguntas.
+            </p>
+            <button 
+              onClick={handleRestart}
+              className="bg-redis-red hover:bg-red-700 px-6 py-3 rounded-lg font-bold w-full"
+            >
+              🔄 Reiniciar Juego
+            </button>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div className="min-h-screen bg-redis-black">
+        {/* Debug panel - visible en desarrollo */}
+        {shouldShowQuestions && (
+          <div className="fixed top-2 right-2 bg-black/80 text-white text-xs p-2 rounded-lg font-mono z-50 max-w-xs">
+            <p className="text-green-400 font-bold mb-1">🐛 Debug Info:</p>
+            <p>Q: {currentQuestion + 1}/{gameQuestions.length}</p>
+            <p>Idx: {currentQuestion}</p>
+            <p>Existe: {currentQuestionData ? '✅' : '❌'}</p>
+            <p className="text-gray-400 text-[10px] mt-1">
+              {currentQuestionData ? currentQuestionData.question.substring(0, 30) + '...' : 'Sin pregunta'}
+            </p>
+            <button
+              onClick={() => {
+                const info = gameQuestions.map((q, i) => 
+                  `${i}: ${q ? '✅' : '❌'} ${q?.question?.substring(0, 20) || 'VACIO'}`
+                ).join('\n');
+                alert(`Array de preguntas:\n\n${info}`);
+              }}
+              className="mt-2 bg-redis-red px-2 py-1 rounded text-[10px] w-full"
+            >
+              Ver Array
+            </button>
+          </div>
+        )}
+        
         <AnimatePresence mode="wait">
-          {shouldShowQuestions && (
+          {shouldShowQuestions && currentQuestionData && (
             <>
               <ScoreBoard
                 key="scoreboard"
@@ -767,7 +861,7 @@ function App() {
               />
               <QuestionCard
                 key={currentQuestion}
-                question={gameQuestions[currentQuestion]}
+                question={currentQuestionData}
                 questionNumber={currentQuestion + 1}
                 totalQuestions={gameQuestions.length}
                 onAnswer={handleAnswer}
