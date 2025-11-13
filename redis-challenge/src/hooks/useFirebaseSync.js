@@ -117,3 +117,37 @@ export const useCompetitionSync = (sessionId, onCompetitionUpdate) => {
 
   return { saveCompetitionToFirebase };
 };
+
+export const useEffectsSync = (sessionId, onEffectsUpdate) => {
+  const unsubscribeRef = useRef(null);
+  useEffect(() => {
+    if (!sessionId) return;
+    const unsubscribe = db.onEffectsChange(sessionId, (effects) => {
+      onEffectsUpdate && onEffectsUpdate(effects);
+    });
+    unsubscribeRef.current = unsubscribe;
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [sessionId, onEffectsUpdate]);
+  return {};
+};
+
+export const useScoresSync = (sessionId, onScoresUpdate) => {
+  const unsubscribeRef = useRef(null);
+  useEffect(() => {
+    if (!sessionId) return;
+    const unsubscribe = db.onScoresChange(sessionId, (scores) => {
+      onScoresUpdate && onScoresUpdate(scores);
+    });
+    unsubscribeRef.current = unsubscribe;
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, [sessionId, onScoresUpdate]);
+  return {};
+};

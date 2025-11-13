@@ -94,7 +94,7 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                           : 200
                     }
                     level="M"
-                    includeMargin={true}
+                    
                   />
                 </div>
 

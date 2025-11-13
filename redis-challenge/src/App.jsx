@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import StartScreen from "./components/StartScreen";
 import QuestionCard from "./components/QuestionCard";
@@ -7,8 +7,9 @@ import ResultScreen from "./components/ResultScreen";
 import Dashboard from "./components/Dashboard";
 import MobileGroupSelection from "./components/MobileGroupSelection";
 import WaitingScreen from "./components/WaitingScreen";
+import PowerCardsModal from "./components/PowerCardsModal";
 import questionsData from "./data/questions.json";
-import { useFirebaseSync, useCompetitionSync } from './hooks/useFirebaseSync';
+import { useFirebaseSync, useCompetitionSync, useEffectsSync, useScoresSync } from './hooks/useFirebaseSync';
 
 // Configuración de grupos
 const GROUPS_CONFIG = [
@@ -34,7 +35,7 @@ const shuffleQuestions = (questions, groupId, sessionId) => {
   const shuffled = [...questions];
   for (let i = shuffled.length - 1; i > 0; i--) {
     hash = (hash * 9301 + 49297) % 233280;
-    const j = hash % (i + 1);
+    const j = Math.abs(hash) % (i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
@@ -48,6 +49,11 @@ function App() {
   const [showResults, setShowResults] = useState(false);
   const [streak, setStreak] = useState(0);
   const [gameQuestions, setGameQuestions] = useState([]);
+  const [showPowerModal, setShowPowerModal] = useState(false);
+  const [offeredPowers, setOfferedPowers] = useState([]);
+  const [pendingResult, setPendingResult] = useState(null);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const pendingResultRef = useRef(null);
 
   // Estado de grupos
   const [groups, setGroups] = useState(GROUPS_CONFIG);
@@ -56,6 +62,11 @@ function App() {
   const [sessionId, setSessionId] = useState("");
   const [competitionStarted, setCompetitionStarted] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(0);
+  const [effectsMap, setEffectsMap] = useState({});
+  const [effectToast, setEffectToast] = useState(null);
+  const [teamScores, setTeamScores] = useState({});
+  const [consumedEffectKeys, setConsumedEffectKeys] = useState([]);
+  const [doubleNext, setDoubleNext] = useState(false);
 
   // BroadcastChannel para comunicación entre pestañas
   const [gameChannel, setGameChannel] = useState(null);
@@ -80,6 +91,14 @@ function App() {
       }
     }
   );
+
+  useEffectsSync(sessionId, (effects) => {
+    setEffectsMap(effects || {});
+  });
+
+  useScoresSync(sessionId, (scores) => {
+    setTeamScores(scores || {});
+  });
 
   // Función para cargar grupos desde localStorage
   const loadGroupsFromStorage = () => {
@@ -197,6 +216,8 @@ function App() {
     setScore(0);
     setShowResults(false);
     setStreak(0);
+    setAnsweredCount(0);
+    setAnsweredCount(0);
 
     // 2. Cargar grupos
     console.log('📂 Loading groups...');
@@ -495,6 +516,14 @@ function App() {
     setScore(0);
     setShowResults(false);
     setStreak(0);
+    setAnsweredCount(0);
+    try {
+      const scores = JSON.parse(localStorage.getItem('redis-scores') || '{}');
+      if (currentUser?.id) {
+        scores[currentUser.id] = 0;
+        localStorage.setItem('redis-scores', JSON.stringify(scores));
+      }
+    } catch {}
   };
 
   // Función para reiniciar la competencia
@@ -582,14 +611,179 @@ function App() {
     setGroups(updatedGroups);
     await saveGroupsToFirebase(updatedGroups);
     
-    // 9. Initialize game questions (this will be picked up by the sync effect)
+    // 9a. Initialize team scores per group in Firebase
+    const initialScores = groups.reduce((acc, g) => {
+      acc[g.id] = 0;
+      return acc;
+    }, {});
+    setTeamScores(initialScores);
+    import('./firebase').then(({ db }) => {
+      db.saveScores(sessionId, initialScores);
+    });
+
+    // 9b. Initialize game questions for HOST
     const shuffled = shuffleQuestions(questionsData, 'all', gameSessionId);
     setGameQuestions(shuffled);
+    setGameStarted(true);
+    setCurrentQuestion(0);
+    setScore(0);
+    setShowResults(false);
+    setStreak(0);
     
     // 10. Force a re-render to ensure state is updated
     setLastUpdate(Date.now());
     
     console.log('✅ Game started successfully with session:', gameSessionId);
+  };
+
+  const generateRandomPowers = (n = 3) => {
+    const pool = [
+      { key: "double_points", name: "Doble Puntos", type: "double_points", value: 2, timing: "immediate" },
+      { key: "skip_question", name: "Saltear Pregunta", type: "skip_question", value: 1, timing: "immediate" },
+      { key: "steal_points", name: "Robar", type: "steal_points", value: Math.floor(Math.random() * 3) + 1, timing: "immediate" },
+      { key: "swap_points", name: "Cambiar puntos", type: "swap_points", value: 1, timing: "immediate" }
+    ];
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n).map((p) => ({
+      id: `${p.key}-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
+      name: p.name,
+      type: p.type,
+      value: p.value,
+      timing: p.timing
+    }));
+  };
+  const getRandomTargetUser = () => {
+    const participants = groups.flatMap(g => (g.participants || []).map(p => ({ ...p, groupId: g.id })));
+    const others = participants.filter(p => p.id !== currentUser?.id);
+    if (others.length === 0) return null;
+    return others[Math.floor(Math.random() * others.length)];
+  };
+
+  const readScoresStorage = () => {
+    try {
+      return JSON.parse(localStorage.getItem('redis-scores') || '{}');
+    } catch { return {}; }
+  };
+
+  const writeScoresStorage = (map) => {
+    localStorage.setItem('redis-scores', JSON.stringify(map));
+  };
+
+  const applySelectedPowerAndAdvance = (power) => {
+    const pr = pendingResult || pendingResultRef.current;
+    if (!pr) return;
+    const { isCorrect: wasCorrect, basePoints, newStreakBase } = pr;
+
+    let pointsToAdd = 0;
+    let nextStreak = 0;
+
+    if (power?.type === 'double_points') {
+      setDoubleNext(true);
+      if (wasCorrect) {
+        pointsToAdd = basePoints;
+        nextStreak = newStreakBase;
+      } else {
+        pointsToAdd = 0;
+        nextStreak = 0;
+      }
+    } else if (power?.type === 'skip_question') {
+      pointsToAdd = basePoints;
+      nextStreak = wasCorrect ? newStreakBase : 1;
+    } else {
+      if (wasCorrect) {
+        pointsToAdd = basePoints;
+        nextStreak = newStreakBase;
+      } else {
+        pointsToAdd = 0;
+        nextStreak = 0;
+      }
+    }
+
+    if (power?.type === 'steal_points') {
+      const targetGroupId = power.targetGroupId;
+      if (targetGroupId) {
+        const points = Math.min(3, Math.max(1, power.value || 1));
+        const payload = {
+          type: 'steal_points',
+          points,
+          fromUserId: currentUser?.id,
+          fromGroupId: currentUser?.groupId,
+          targetGroupId,
+          questionIndex: currentQuestion,
+          timestamp: Date.now()
+        };
+        import('./firebase').then(({ db }) => {
+          db.pushEffect(sessionId, payload);
+        });
+        const newScores = { ...teamScores };
+        const fromId = currentUser?.groupId;
+        newScores[fromId] = (newScores[fromId] || 0) + points;
+        newScores[targetGroupId] = Math.max(0, (newScores[targetGroupId] || 0) - points);
+        setTeamScores(newScores);
+        import('./firebase').then(({ db }) => {
+          db.saveScores(sessionId, newScores);
+        });
+        const targetName = groups.find(g => g.id === targetGroupId)?.name || '';
+        setEffectToast({ type: 'steal_points_success', points, targetGroupId, fromGroupId: fromId, message: `Robaste +${points} a ${targetName}` });
+        setTimeout(() => setEffectToast(null), 3000);
+      }
+    }
+
+    if (power?.type === 'swap_points') {
+      const targetGroupId = power.targetGroupId;
+      if (targetGroupId) {
+        const newScores = { ...teamScores };
+        const fromId = currentUser?.groupId;
+        const tmp = newScores[fromId] || 0;
+        newScores[fromId] = newScores[targetGroupId] || 0;
+        newScores[targetGroupId] = tmp;
+        setTeamScores(newScores);
+        import('./firebase').then(({ db }) => {
+          db.saveScores(sessionId, newScores);
+          db.pushEffect(sessionId, {
+            type: 'swap_points',
+            fromGroupId: fromId,
+            targetGroupId,
+            questionIndex: currentQuestion,
+            timestamp: Date.now()
+          });
+          db.pushEffect(sessionId, {
+            type: 'swap_points',
+            fromGroupId: targetGroupId,
+            targetGroupId: fromId,
+            questionIndex: currentQuestion,
+            timestamp: Date.now()
+          });
+        });
+      }
+    }
+
+    
+
+    if (power?.type !== 'steal_points' && power?.type !== 'swap_points') {
+      setScore((prev) => prev + pointsToAdd);
+      setStreak(nextStreak);
+    } else {
+      setStreak(nextStreak);
+    }
+
+    setShowPowerModal(false);
+    setOfferedPowers([]);
+    setPendingResult(null);
+    pendingResultRef.current = null;
+    setAnsweredCount((c) => c + 1);
+
+    if (currentQuestion < gameQuestions.length - 1) {
+      const nextIndex = currentQuestion + 1;
+      const nextQuestion = gameQuestions[nextIndex];
+      if (nextQuestion) {
+        setCurrentQuestion(nextIndex);
+      } else {
+        setShowResults(true);
+      }
+    } else {
+      setShowResults(true);
+    }
   };
 
   const handleAnswer = (isCorrect) => {
@@ -600,48 +794,55 @@ function App() {
       nextQuestionIndex: currentQuestion + 1
     });
     
-    if (isCorrect) {
-      let points = 10;
-      const newStreak = streak + 1;
-
-      if (newStreak >= 3 && newStreak % 3 === 0) {
+    let points = 10;
+    const newStreak = isCorrect ? streak + 1 : 0;
+    if (doubleNext) {
+      points = isCorrect ? 20 : 0;
+      setDoubleNext(false);
+    } else {
+      if (isCorrect && newStreak >= 3 && newStreak % 3 === 0) {
         points += 5;
       }
-
-      setScore(score + points);
-      setStreak(newStreak);
-    } else {
-      setStreak(0);
     }
 
-    if (currentQuestion < gameQuestions.length - 1) {
-      const nextIndex = currentQuestion + 1;
-      const nextQuestion = gameQuestions[nextIndex];
-      
-      console.log('➡️ Avanzando a siguiente pregunta:', {
-        nextIndex,
-        hasNextQuestion: !!nextQuestion,
-        questionText: nextQuestion?.question?.substring(0, 50) || 'UNDEFINED'
-      });
-      
-      // Verificar que la siguiente pregunta existe antes de avanzar
-      if (nextQuestion) {
-        setCurrentQuestion(nextIndex);
-      } else {
-        console.error('❌ La siguiente pregunta no existe en el array!');
-        console.log('📋 Array completo:', gameQuestions.map((q, i) => ({
-          index: i,
-          exists: !!q,
-          question: q?.question?.substring(0, 30) || 'UNDEFINED'
-        })));
-        // Forzar a mostrar resultados si no hay siguiente pregunta
-        setShowResults(true);
-      }
+    const willOfferPower = [2, 4, 6, 8].includes(answeredCount + 1);
+    const pending = { isCorrect, basePoints: points, newStreakBase: newStreak };
+    setPendingResult(pending);
+    pendingResultRef.current = pending;
+
+    const pendingKeys = Object.keys(effectsMap || {}).filter(k => !consumedEffectKeys.includes(k));
+    const targetEffects = pendingKeys
+      .map(k => ({ key: k, ...effectsMap[k] }))
+      .filter(e => e.targetGroupId === currentUser?.groupId);
+    if (targetEffects.length > 0) {
+      const e = targetEffects[0];
+      setEffectToast({ type: e.type, points: e.points, fromGroupId: e.fromGroupId, targetGroupId: e.targetGroupId });
+      setConsumedEffectKeys(prev => [...prev, e.key]);
+      setTimeout(() => setEffectToast(null), 3000);
+    }
+
+    if (willOfferPower) {
+      setOfferedPowers(generateRandomPowers(3));
+      setShowPowerModal(true);
     } else {
-      console.log('🏁 Última pregunta, mostrando resultados');
-      setShowResults(true);
+      setTimeout(() => {
+        applySelectedPowerAndAdvance(null);
+      }, 0);
     }
   };
+
+  useEffect(() => {
+    const handler = (ev) => {
+      const e = ev.detail;
+      if (currentUser?.groupId && e?.targetGroupId === currentUser.groupId) {
+        setEffectToast({ type: e.type, points: e.points, fromGroupId: e.fromGroupId });
+        setTimeout(() => setEffectToast(null), 3000);
+        setScore((prev) => Math.max(0, prev - e.points));
+      }
+    };
+    window.addEventListener('redis-effect-local', handler);
+    return () => window.removeEventListener('redis-effect-local', handler);
+  }, [currentUser?.groupId]);
 
   const handleRestart = () => {
     if (gameMode === "playing") {
@@ -866,6 +1067,47 @@ function App() {
                 totalQuestions={gameQuestions.length}
                 onAnswer={handleAnswer}
               />
+              {showPowerModal && (
+                <PowerCardsModal
+                  offeredPowers={offeredPowers}
+                  groups={groups}
+                  onConfirm={applySelectedPowerAndAdvance}
+                  onClose={() => {
+                    setShowPowerModal(false);
+                    setOfferedPowers([]);
+                    setPendingResult(null);
+                    pendingResultRef.current = null;
+                  }}
+                />
+              )}
+              {effectToast && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg z-50 ${
+                    effectToast.type === 'swap_points'
+                      ? 'bg-yellow-500 text-black'
+                      : effectToast.type === 'steal_points_success'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-redis-red text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">
+                      {effectToast.type === 'swap_points' ? '🔁' : effectToast.type === 'steal_points_success' ? '🏴‍☠️' : '🚨'}
+                    </span>
+                    <span>
+                      {
+                        effectToast.type === 'swap_points'
+                          ? `Intercambio de puntos: ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''} ↔ ${groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}`
+                          : effectToast.type === 'steal_points_success'
+                            ? effectToast.message || `Robaste +${effectToast.points} puntos`
+                            : `Tu equipo recibió -${effectToast.points} puntos de ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}`
+                      }
+                    </span>
+                  </div>
+                </motion.div>
+              )}
             </>
           )}
 

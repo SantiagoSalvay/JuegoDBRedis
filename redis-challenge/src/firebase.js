@@ -52,10 +52,37 @@ export const db = {
     });
   },
 
+  saveScores: async (sessionId, scores) => {
+    const scoresRef = ref(database, `sessions/${sessionId}/scores`);
+    await set(scoresRef, scores);
+  },
+
+  onScoresChange: (sessionId, callback) => {
+    const scoresRef = ref(database, `sessions/${sessionId}/scores`);
+    return onValue(scoresRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      callback(data);
+    });
+  },
+
   // Limpiar sesión
   clearSession: async (sessionId) => {
     const sessionRef = ref(database, `sessions/${sessionId}`);
     await remove(sessionRef);
+  },
+
+  pushEffect: async (sessionId, effectData) => {
+    const effectsRef = ref(database, `sessions/${sessionId}/effects`);
+    const newRef = await push(effectsRef, effectData);
+    return newRef.key;
+  },
+
+  onEffectsChange: (sessionId, callback) => {
+    const effectsRef = ref(database, `sessions/${sessionId}/effects`);
+    return onValue(effectsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      callback(data);
+    });
   }
 };
 
