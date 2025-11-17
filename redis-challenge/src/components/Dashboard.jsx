@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import QRCode from "react-qr-code";
 
-const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionStarted, onResetCompetition }) => {
+const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionStarted, onResetCompetition, teamScores = {} }) => {
   const [currentURL, setCurrentURL] = useState("");
 
   useEffect(() => {
@@ -152,14 +152,19 @@ const Dashboard = ({ groups, sessionId, onStartGame, clearGroups, competitionSta
                             Grupo {group.id}
                           </h3>
                         </div>
-                        <div
-                          className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold flex-shrink-0 ${
-                            (group.participants?.length || 0) > 0
-                              ? "bg-green-600 text-white"
-                              : "bg-gray-600 text-gray-300"
-                          }`}
-                        >
-                          {group.participants?.length || 0} 👥
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div
+                            className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold ${
+                              (group.participants?.length || 0) > 0
+                                ? "bg-green-600 text-white"
+                                : "bg-gray-600 text-gray-300"
+                            }`}
+                          >
+                            {group.participants?.length || 0} 👥
+                          </div>
+                          <div className="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-redis-red/20 text-redis-red">
+                            ⭐ {teamScores[group.id] ?? 0}
+                          </div>
                         </div>
                       </div>
 

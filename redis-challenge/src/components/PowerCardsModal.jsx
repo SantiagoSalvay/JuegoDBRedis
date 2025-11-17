@@ -9,7 +9,7 @@ const PowerCardsModal = ({ offeredPowers = [], groups = [], onConfirm, onClose }
     if (selectedId) return;
     setSelectedId(id);
     const chosen = offeredPowers.find((p) => p.id === id);
-    if (chosen?.type !== 'steal_points') {
+    if (chosen?.type === 'double_points' || chosen?.type === 'skip_question') {
       setTimeout(() => onConfirm?.(chosen), 800);
     }
   };
@@ -78,35 +78,7 @@ const PowerCardsModal = ({ offeredPowers = [], groups = [], onConfirm, onClose }
             )}
           </div>
         )}
-        {selectedId && offeredPowers.find(p => p.id === selectedId)?.type === 'swap_points' && (
-          <div className="mt-6">
-            <div className="mb-2 text-sm text-gray-300">Elige equipo para intercambiar puntos</div>
-            <div className="grid grid-cols-2 md-grid-cols-4 gap-2">
-              {groups.map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => setTargetGroupId(g.id)}
-                  className={`px-3 py-2 rounded-lg text-sm font-bold border-2 ${
-                    targetGroupId === g.id ? 'border-redis-red text-redis-red' : 'border-gray-600 text-white'
-                  }`}
-                  style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-                >
-                  {g.name}
-                </button>
-              ))}
-            </div>
-            {targetGroupId && (
-              <div className="mt-4">
-                <button
-                  onClick={() => onConfirm?.({ id: selectedId, type: 'swap_points', targetGroupId })}
-                  className="bg-redis-red hover:bg-red-700 text-white font-bold px-4 py-2 rounded-lg"
-                >
-                  Aplicar
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        
         <div className="mt-6 text-center text-xs text-gray-400">Se aplica automáticamente al elegir</div>
       </motion.div>
     </div>

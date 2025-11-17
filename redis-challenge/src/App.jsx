@@ -65,6 +65,7 @@ function App() {
   const [effectsMap, setEffectsMap] = useState({});
   const [effectToast, setEffectToast] = useState(null);
   const [teamScores, setTeamScores] = useState({});
+  const teamScoresRef = useRef({});
   const [consumedEffectKeys, setConsumedEffectKeys] = useState([]);
   const [doubleNext, setDoubleNext] = useState(false);
 
@@ -96,8 +97,25 @@ function App() {
     setEffectsMap(effects || {});
   });
 
+  const setTeamScoresSafe = (map) => {
+    const next = map || {};
+    teamScoresRef.current = next;
+    setTeamScores(next);
+    writeTeamScoresStorage(next);
+  };
+
   useScoresSync(sessionId, (scores) => {
-    setTeamScores(scores || {});
+    const incoming = scores || {};
+    const hasIncoming = Object.keys(incoming).length > 0;
+    if (hasIncoming) {
+      setTeamScoresSafe(incoming);
+    } else {
+      // Prefer local cached scores when server returns empty (offline or not initialized)
+      const cached = readTeamScoresStorage();
+      if (Object.keys(cached).length > 0) {
+        setTeamScoresSafe(cached);
+      }
+    }
   });
 
   // Función para cargar grupos desde localStorage
@@ -222,6 +240,12 @@ function App() {
     // 2. Cargar grupos
     console.log('📂 Loading groups...');
     loadGroupsFromStorage();
+
+    // 2b. Cargar puntajes de equipos desde almacenamiento local (fallback)
+    const storedTeamScores = readTeamScoresStorage();
+    if (storedTeamScores && Object.keys(storedTeamScores).length > 0) {
+      setTeamScores(storedTeamScores);
+    }
 
     // 3. Obtener parámetros de la URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -640,8 +664,7 @@ function App() {
     const pool = [
       { key: "double_points", name: "Doble Puntos", type: "double_points", value: 2, timing: "immediate" },
       { key: "skip_question", name: "Saltear Pregunta", type: "skip_question", value: 1, timing: "immediate" },
-      { key: "steal_points", name: "Robar", type: "steal_points", value: Math.floor(Math.random() * 3) + 1, timing: "immediate" },
-      { key: "swap_points", name: "Cambiar puntos", type: "swap_points", value: 1, timing: "immediate" }
+      { key: "steal_points", name: "Robar", type: "steal_points", value: Math.floor(Math.random() * 3) + 1, timing: "immediate" }
     ];
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, n).map((p) => ({
@@ -671,8 +694,9 @@ function App() {
 
   const applySelectedPowerAndAdvance = (power) => {
     const pr = pendingResult || pendingResultRef.current;
-    if (!pr) return;
-    const { isCorrect: wasCorrect, basePoints, newStreakBase } = pr;
+    const wasCorrect = pr?.isCorrect ?? false;
+    const basePoints = pr?.basePoints ?? 0;
+    const newStreakBase = pr?.newStreakBase ?? 0;
 
     let pointsToAdd = 0;
     let nextStreak = 0;
@@ -715,48 +739,29 @@ function App() {
         import('./firebase').then(({ db }) => {
           db.pushEffect(sessionId, payload);
         });
-        const newScores = { ...teamScores };
+        const newScores = { ...teamScoresRef.current };
         const fromId = currentUser?.groupId;
         newScores[fromId] = (newScores[fromId] || 0) + points;
         newScores[targetGroupId] = Math.max(0, (newScores[targetGroupId] || 0) - points);
-        setTeamScores(newScores);
+        setTeamScoresSafe(newScores);
         import('./firebase').then(({ db }) => {
           db.saveScores(sessionId, newScores);
         });
         const targetName = groups.find(g => g.id === targetGroupId)?.name || '';
-        setEffectToast({ type: 'steal_points_success', points, targetGroupId, fromGroupId: fromId, message: `Robaste +${points} a ${targetName}` });
+        setEffectToast({ 
+          type: 'steal_points_success', 
+          points, 
+          targetGroupId, 
+          fromGroupId: fromId, 
+          fromScore: newScores[fromId] || 0,
+          targetScore: newScores[targetGroupId] || 0,
+          message: `Robaste +${points} a ${targetName}` 
+        });
         setTimeout(() => setEffectToast(null), 3000);
       }
     }
 
-    if (power?.type === 'swap_points') {
-      const targetGroupId = power.targetGroupId;
-      if (targetGroupId) {
-        const newScores = { ...teamScores };
-        const fromId = currentUser?.groupId;
-        const tmp = newScores[fromId] || 0;
-        newScores[fromId] = newScores[targetGroupId] || 0;
-        newScores[targetGroupId] = tmp;
-        setTeamScores(newScores);
-        import('./firebase').then(({ db }) => {
-          db.saveScores(sessionId, newScores);
-          db.pushEffect(sessionId, {
-            type: 'swap_points',
-            fromGroupId: fromId,
-            targetGroupId,
-            questionIndex: currentQuestion,
-            timestamp: Date.now()
-          });
-          db.pushEffect(sessionId, {
-            type: 'swap_points',
-            fromGroupId: targetGroupId,
-            targetGroupId: fromId,
-            questionIndex: currentQuestion,
-            timestamp: Date.now()
-          });
-        });
-      }
-    }
+    // swap_points eliminado
 
     
 
@@ -844,6 +849,25 @@ function App() {
     return () => window.removeEventListener('redis-effect-local', handler);
   }, [currentUser?.groupId]);
 
+  useEffect(() => {
+    if (!currentUser?.groupId) return;
+    const pendingKeys = Object.keys(effectsMap || {}).filter(k => !consumedEffectKeys.includes(k));
+    for (const k of pendingKeys) {
+      const e = effectsMap[k];
+      if (e && e.targetGroupId === currentUser.groupId) {
+        setEffectToast({ type: e.type, points: e.points, fromGroupId: e.fromGroupId, targetGroupId: e.targetGroupId });
+        setConsumedEffectKeys(prev => [...prev, k]);
+        setTimeout(() => setEffectToast(null), 3000);
+        if (e.type === 'steal_points') {
+          setTeamScores(prev => ({
+            ...prev,
+            [currentUser.groupId]: Math.max(0, (prev[currentUser.groupId] || 0) - (e.points || 0))
+          }));
+        }
+      }
+    }
+  }, [effectsMap, currentUser?.groupId]);
+
   const handleRestart = () => {
     if (gameMode === "playing") {
       handleStart();
@@ -863,6 +887,7 @@ function App() {
     sessionId,
     onStartGame: handleStartCompetition,
     clearGroups,
+    teamScores,
   };
 
   const mobileGroupSelectionProps = {
@@ -1035,17 +1060,6 @@ function App() {
             <p className="text-gray-400 text-[10px] mt-1">
               {currentQuestionData ? currentQuestionData.question.substring(0, 30) + '...' : 'Sin pregunta'}
             </p>
-            <button
-              onClick={() => {
-                const info = gameQuestions.map((q, i) => 
-                  `${i}: ${q ? '✅' : '❌'} ${q?.question?.substring(0, 20) || 'VACIO'}`
-                ).join('\n');
-                alert(`Array de preguntas:\n\n${info}`);
-              }}
-              className="mt-2 bg-redis-red px-2 py-1 rounded text-[10px] w-full"
-            >
-              Ver Array
-            </button>
           </div>
         )}
         
@@ -1105,7 +1119,61 @@ function App() {
                             : `Tu equipo recibió -${effectToast.points} puntos de ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}`
                       }
                     </span>
+                    {effectToast.type === 'steal_points_success' && (
+                      <div className="mt-1 text-sm">
+                        Tu equipo: {effectToast.fromScore} | {groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}: {effectToast.targetScore}
+                      </div>
+                    )}
+                    {effectToast.type === 'swap_points' && (
+                      <div className="mt-1 text-sm">
+                        {groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}: {(effectToast.fromScore ?? (teamScores[effectToast.fromGroupId] ?? 0))} | {groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}: {(effectToast.targetScore ?? (teamScores[effectToast.targetGroupId] ?? 0))}
+                      </div>
+                    )}
                   </div>
+                </motion.div>
+              )}
+              {effectToast && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={`px-6 py-4 rounded-2xl shadow-2xl ${
+                      effectToast.type === 'swap_points'
+                        ? 'bg-yellow-500 text-black'
+                        : effectToast.type === 'steal_points_success'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-redis-red text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 text-xl font-bold">
+                      <span className="text-3xl">
+                        {effectToast.type === 'swap_points' ? '🔁' : effectToast.type === 'steal_points_success' ? '🏴‍☠️' : '🚨'}
+                      </span>
+                      <span>
+                        {
+                          effectToast.type === 'swap_points'
+                            ? `Intercambio: ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''} ↔ ${groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}`
+                            : effectToast.type === 'steal_points_success'
+                              ? effectToast.message || `Robaste +${effectToast.points} puntos`
+                              : `Penalización: -${effectToast.points}`
+                        }
+                      </span>
+                    </div>
+                    {effectToast.type === 'swap_points' && (
+                      <div className="mt-2 text-sm">
+                        {groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}: {(effectToast.fromScore ?? (teamScores[effectToast.fromGroupId] ?? 0))} | {groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}: {(effectToast.targetScore ?? (teamScores[effectToast.targetGroupId] ?? 0))}
+                      </div>
+                    )}
+                    {effectToast.type === 'steal_points_success' && (
+                      <div className="mt-2 text-sm">
+                        Tu equipo: {(effectToast.fromScore ?? (teamScores[effectToast.fromGroupId] ?? 0))} | {groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}: {(effectToast.targetScore ?? (teamScores[effectToast.targetGroupId] ?? 0))}
+                      </div>
+                    )}
+                  </motion.div>
                 </motion.div>
               )}
             </>
@@ -1166,3 +1234,12 @@ function App() {
 }
 
 export default App;
+  const readTeamScoresStorage = () => {
+    try {
+      return JSON.parse(localStorage.getItem('redis-team-scores') || '{}');
+    } catch { return {}; }
+  };
+
+  const writeTeamScoresStorage = (map) => {
+    localStorage.setItem('redis-team-scores', JSON.stringify(map));
+  };
