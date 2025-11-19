@@ -1116,7 +1116,7 @@ function App() {
                           ? `Intercambio de puntos: ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''} ↔ ${groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}`
                           : effectToast.type === 'steal_points_success'
                             ? effectToast.message || `Robaste +${effectToast.points} puntos`
-                            : `Tu equipo recibió -${effectToast.points} puntos de ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}`
+                            : `Te robaron ${effectToast.points} puntos de ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''}`
                       }
                     </span>
                     {effectToast.type === 'steal_points_success' && (
@@ -1159,7 +1159,7 @@ function App() {
                             ? `Intercambio: ${groups.find(g => g.id === effectToast.fromGroupId)?.name || ''} ↔ ${groups.find(g => g.id === effectToast.targetGroupId)?.name || ''}`
                             : effectToast.type === 'steal_points_success'
                               ? effectToast.message || `Robaste +${effectToast.points} puntos`
-                              : `Penalización: -${effectToast.points}`
+                              : `Te robaron ${effectToast.points} puntos`
                         }
                       </span>
                     </div>
